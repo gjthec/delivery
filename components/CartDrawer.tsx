@@ -44,7 +44,7 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, items, onRemove, onClear
                 <div className="w-24 h-24 bg-gray-50 dark:bg-zinc-900 rounded-full flex items-center justify-center">
                   <ShoppingBag size={48} className="dark:text-zinc-100" />
                 </div>
-                <p className="font-bold text-gray-500 dark:text-zinc-400 italic">Sua cesta está vazia...<br/>A IA pode te ajudar!</p>
+                <p className="font-bold text-gray-500 dark:text-zinc-400 italic">Sua cesta está vazia!<br/>A IA pode te ajudar.</p>
               </div>
             ) : (
               items.map((item, index) => (
