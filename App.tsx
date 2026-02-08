@@ -1,11 +1,14 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Sparkles, Filter, X, ShoppingBag, ChefHat, ArrowRight, CheckCircle2, Star, Wand2, Wallet, Leaf, Zap, History, Loader2, User } from 'lucide-react';
+import { Search, Sparkles, Filter, X, ShoppingBag, ChefHat, ArrowRight, CheckCircle2, Star, Wand2, Wallet, Leaf, Zap, History, Loader2, User, Home, Bell, Tag, MapPin, Truck, UtensilsCrossed, PackageCheck, Copy, QrCode, Plus, Clock } from 'lucide-react';
 import Header from './components/Header';
 import MenuCard from './components/MenuCard';
 import CartDrawer from './components/CartDrawer';
+import PixPaymentModal from './components/PixPaymentModal';
+import CategoryIcon from './components/CategoryIcon';
+import ItemDetailModal from './components/ItemDetailModal';
 import { MENU_ITEMS, CATEGORIES } from './constants';
-import { MenuItem, FilterType } from './types';
+import { MenuItem, FilterType, CartItem, ExtraItem, Address, PaymentType, CardBrand } from './types';
 import { askWaiter } from './services/geminiService';
 
 interface AiSuggestion {
@@ -14,18 +17,49 @@ interface AiSuggestion {
   reason: string;
 }
 
+export interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'shipping';
+  time: string;
+  read: boolean;
+  extraAction?: { label: string, onClick: () => void };
+}
+
 const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [aiSuggestions, setAiSuggestions] = useState<AiSuggestion[]>([]);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const [cart, setCart] = useState<MenuItem[]>([]);
+  const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [lastAddedItem, setLastAddedItem] = useState<{name: string, qty: number} | null>(null);
+  const [isCartJiggling, setIsCartJiggling] = useState(false);
+  const [isPixModalOpen, setIsPixModalOpen] = useState(false);
+  const [currentTotal, setCurrentTotal] = useState(0);
+  const [lastOrderDetails, setLastOrderDetails] = useState<any>(null);
+  
+  const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
+  const [editingCartIndex, setEditingCartIndex] = useState<number | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  
+  const PIX_CODE = "00020126330014br.gov.bcb.pix0111123456789015204000053039865802BR5925FoodAI Restaurantes6009Sao Paulo62070503***6304E2D1";
+  const WHATSAPP_NUMBER = "5511999999999"; 
+
+  const [notifications, setNotifications] = useState<Notification[]>([
+    {
+      id: 'notif-initial-1',
+      title: '🏷️ Cupom Ativo!',
+      message: 'Use FOODAI10 e ganhe R$ 10,00 de desconto no seu primeiro pedido acima de R$ 50,00.',
+      type: 'warning',
+      time: '2h atrás',
+      read: false
+    }
+  ]);
+  
   const searchInputRef = useRef<HTMLInputElement>(null);
   
-  // Persistência de tema
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('foodai-theme');
     if (saved) return saved === 'dark';
@@ -41,42 +75,112 @@ const App: React.FC = () => {
     }
   }, [darkMode]);
 
+  useEffect(() => {
+    if (isCartOpen || isPixModalOpen || isDetailModalOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+  }, [isCartOpen, isPixModalOpen, isDetailModalOpen]);
+
   const filteredItems = MENU_ITEMS.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           item.description.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = activeCategory ? item.category === activeCategory : true;
+    
+    let matchesCategory = true;
+    if (activeCategory === 'Promoções') {
+      matchesCategory = !!(item.originalPrice && item.originalPrice > item.price);
+    } else if (activeCategory) {
+      matchesCategory = item.category === activeCategory;
+    }
+
     return matchesSearch && matchesCategory;
   });
 
-  const addToCart = (item: MenuItem, quantity: number = 1) => {
-    const itemsToAdd = Array(quantity).fill(item);
-    setCart(prev => [...prev, ...itemsToAdd]);
-    setLastAddedItem({ name: item.name, qty: quantity });
-    setTimeout(() => setLastAddedItem(null), 3000);
+  const getItemCountInCart = (itemId: string) => {
+    return cart
+      .filter(cartItem => cartItem.item.id === itemId)
+      .reduce((acc, curr) => acc + curr.quantity, 0);
   };
 
-  const handleQuickAction = async (text: string) => {
-    setSearchQuery(text);
-    setIsAiLoading(true);
-    setAiSuggestions([]);
-    setIsSearchFocused(false); // Esconde as sugestões após clicar
-    const result = await askWaiter(text);
-    if (result?.suggestions) {
-        setAiSuggestions(result.suggestions);
-        setTimeout(() => {
-            const el = document.getElementById('ai-suggestions-anchor');
-            el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 100);
+  const saveToCart = (item: MenuItem, quantity: number, removedIngredients: string[], selectedExtras: ExtraItem[], observations: string) => {
+    if (editingCartIndex !== null) {
+      // Atualizar item existente
+      const updatedCart = [...cart];
+      updatedCart[editingCartIndex] = {
+        ...updatedCart[editingCartIndex],
+        quantity,
+        removedIngredients,
+        selectedExtras,
+        observations
+      };
+      setCart(updatedCart);
+      setEditingCartIndex(null);
+    } else {
+      // Adicionar novo item
+      const newCartItem: CartItem = {
+        cartId: Math.random().toString(36).substr(2, 9),
+        item,
+        quantity,
+        removedIngredients,
+        selectedExtras,
+        observations
+      };
+      setCart(prev => [...prev, newCartItem]);
     }
-    setIsAiLoading(false);
+    
+    setIsCartJiggling(true);
+    setTimeout(() => setIsCartJiggling(false), 500);
   };
 
-  const handleAskWaiter = async () => {
-    if (!searchQuery) return;
+  const openItemDetails = (item: MenuItem) => {
+    setEditingCartIndex(null);
+    setSelectedItem(item);
+    setIsDetailModalOpen(true);
+  };
+
+  const handleEditCartItem = (index: number) => {
+    const cartItem = cart[index];
+    setEditingCartIndex(index);
+    setSelectedItem(cartItem.item);
+    setIsDetailModalOpen(true);
+  };
+
+  const handleCheckout = (details: { payment: { type: PaymentType, brand?: CardBrand, changeFor?: string }, address: Address }) => {
+    if (cart.length === 0) return;
+    const subtotal = cart.reduce((acc, ci) => {
+      const extrasTotal = ci.selectedExtras.reduce((ea, ec) => ea + ec.price, 0);
+      return acc + ((ci.item.price + extrasTotal) * ci.quantity);
+    }, 0);
+    setCurrentTotal(subtotal);
+    setLastOrderDetails(details);
+    setIsCartOpen(false);
+    if (details.payment.type === 'pix') {
+      setIsPixModalOpen(true);
+    } else {
+      setCart([]); 
+    }
+  };
+
+  const handlePixConfirmed = () => {
+    setCart([]); 
+    setIsPixModalOpen(false);
+  };
+
+  const markNotificationsAsRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  };
+
+  const handleAskWaiter = async (overrideQuery?: string) => {
+    const finalQuery = overrideQuery || searchQuery;
+    if (!finalQuery) return;
+    
+    setSearchQuery(finalQuery);
     setIsAiLoading(true);
     setAiSuggestions([]);
     setIsSearchFocused(false);
-    const result = await askWaiter(searchQuery);
+    
+    const result = await askWaiter(finalQuery);
     if (result?.suggestions) {
         setAiSuggestions(result.suggestions);
         setTimeout(() => {
@@ -87,232 +191,218 @@ const App: React.FC = () => {
     setIsAiLoading(false);
   };
 
+  const handleExploreClick = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setTimeout(() => {
+      searchInputRef.current?.focus();
+      setIsSearchFocused(true);
+    }, 500);
+  };
+
   const quickPrompts = [
-    { text: "Quero algo barato", icon: <Wallet size={16} className="text-orange-600" />, action: "Quero sugestões de pratos mais em conta no cardápio" },
-    { text: "Quero comer saudável", icon: <Leaf size={16} className="text-green-600" />, action: "Quero opções leves e saudáveis" },
-    { text: "Quero um lanche rápido", icon: <Zap size={16} className="text-yellow-500" />, action: "Quero algo que fique pronto rápido ou um lanche" },
-    { text: "Quero repetir meu último pedido", icon: <History size={16} className="text-blue-500" />, action: "Quero o que pedi da última vez ou algo parecido" },
+    { text: "Quero algo barato", icon: <Wallet size={16} className="text-orange-500" />, action: "Quero opções de lanches e pratos mais baratos do cardápio" },
+    { text: "Quero comer saudável", icon: <Leaf size={16} className="text-green-500" />, action: "Quero opções saudáveis, leves e com baixas calorias" },
+    { text: "Quero um lanche rápido", icon: <Zap size={16} className="text-yellow-500" />, action: "Quero algo que fique pronto rápido para matar minha fome agora" },
+    { text: "Quero repetir meu último pedido", icon: <History size={16} className="text-blue-500" />, action: "Quero repetir o combo de burger artesanal com fritas" }
   ];
 
+  const currentInitialData = editingCartIndex !== null ? {
+    removedIngredients: cart[editingCartIndex].removedIngredients,
+    selectedExtras: cart[editingCartIndex].selectedExtras,
+    observations: cart[editingCartIndex].observations,
+    quantity: cart[editingCartIndex].quantity
+  } : null;
+
   return (
-    <div className="min-h-screen bg-white dark:bg-zinc-950 transition-colors duration-300 pb-40">
-      <Header 
-        isDarkMode={darkMode}
-        onToggleDarkMode={() => setDarkMode(!darkMode)}
-      />
+    <div className="min-h-screen bg-white dark:bg-zinc-950 transition-colors duration-300 pb-44 text-zinc-900 dark:text-zinc-50 font-sans selection:bg-orange-100 selection:text-orange-900 overflow-x-hidden">
+      
+      <div className={`fixed top-0 left-0 right-0 z-[100] transition-all duration-500 ease-in-out ${isCartOpen || isPixModalOpen || isDetailModalOpen ? '-translate-y-full opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'}`}>
+        <Header 
+          isDarkMode={darkMode}
+          onToggleDarkMode={() => setDarkMode(!darkMode)}
+          notifications={notifications}
+          onReadNotifications={markNotificationsAsRead}
+        />
+      </div>
       
       <CartDrawer 
         isOpen={isCartOpen} 
         onClose={() => setIsCartOpen(false)} 
-        items={cart}
+        cartItems={cart}
         onRemove={(idx) => setCart(prev => prev.filter((_, i) => i !== idx))}
+        onEdit={handleEditCartItem}
         onClear={() => setCart([])}
+        onCheckout={handleCheckout}
       />
 
-      {lastAddedItem && (
-        <div className="fixed bottom-32 left-4 right-4 z-[100] bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 p-4 rounded-2xl shadow-2xl flex items-center justify-between animate-slide-up border border-white/10 dark:border-black/10">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
-              <CheckCircle2 size={16} className="text-white" />
-            </div>
-            <p className="text-sm font-bold truncate">Adicionado à cesta!</p>
-          </div>
-          <button onClick={() => setIsCartOpen(true)} className="text-orange-400 dark:text-orange-600 font-black text-xs uppercase tracking-widest px-2">
-            Ver Tudo
-          </button>
-        </div>
-      )}
+      <PixPaymentModal 
+        isOpen={isPixModalOpen} 
+        onClose={() => setIsPixModalOpen(false)} 
+        onConfirm={handlePixConfirmed}
+        pixCode={PIX_CODE} 
+        total={currentTotal} 
+      />
+
+      <ItemDetailModal 
+        isOpen={isDetailModalOpen}
+        item={selectedItem}
+        initialData={currentInitialData}
+        onClose={() => { setIsDetailModalOpen(false); setEditingCartIndex(null); }}
+        onAddToCart={(custom) => {
+          if (selectedItem) {
+            saveToCart(selectedItem, custom.quantity, custom.removedIngredients, custom.selectedExtras, custom.observations);
+          }
+        }}
+      />
 
       <main>
-        <section className="px-6 pt-28 pb-4 bg-gradient-to-b from-orange-50/50 dark:from-orange-950/10 to-transparent">
-          <div className="mb-6">
-            <div className="inline-flex items-center gap-2 bg-orange-100/50 dark:bg-orange-500/10 px-3 py-1.5 rounded-full mb-3 border border-orange-200/50 dark:border-orange-500/20 animate-pulse">
-              <Sparkles size={12} className="text-orange-600 dark:text-orange-400" />
-              <span className="text-[10px] font-black text-orange-600 dark:text-orange-400 uppercase tracking-[0.15em]">Sabor Inteligente</span>
+        <section className="px-6 pt-32 pb-4 bg-gradient-to-b from-orange-50/50 dark:from-orange-950/10 to-transparent">
+          <div className="mb-8">
+            <div className="inline-flex items-center gap-2 bg-orange-100/50 dark:bg-orange-500/10 px-4 py-2 rounded-full mb-4 border border-orange-200/50 dark:border-orange-500/20">
+              <Sparkles size={14} className="text-orange-600" />
+              <span className="text-[10px] font-black text-orange-600 dark:text-orange-400 uppercase tracking-[0.2em]">Inteligência Gastronômica</span>
             </div>
-            <h1 className="text-[2.5rem] font-[900] tracking-tighter leading-[0.95] mb-4 text-zinc-900 dark:text-zinc-50">
-              O que você quer <br/> <span className="text-orange-500 italic text-[2.75rem]">sentir hoje?</span>
+            <h1 className="text-[2.75rem] font-[900] tracking-tighter leading-[0.9] mb-4">
+              O que você quer <br/> <span className="text-orange-500 italic text-[3rem]">sentir hoje?</span>
             </h1>
           </div>
 
-          <div className="relative group mb-2">
-            <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none transition-colors text-orange-500">
-               {isAiLoading ? <Loader2 size={20} className="animate-spin text-orange-500" /> : <Sparkles size={20} />}
+          <div className="relative group mb-8">
+            <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none transition-colors text-orange-500">
+               {isAiLoading ? <Loader2 size={22} className="animate-spin" /> : <Sparkles size={22} />}
             </div>
             <input
               ref={searchInputRef}
               type="text"
-              className="w-full pl-12 pr-28 py-5 bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-[1.8rem] shadow-2xl shadow-orange-100/20 dark:shadow-black/50 text-sm font-semibold text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-300 dark:placeholder:text-zinc-600 focus:ring-4 focus:ring-orange-50 dark:focus:ring-orange-900/10 outline-none transition-all"
-              placeholder='Ex: "Jantar romântico leve"'
+              className="w-full pl-14 pr-32 py-6 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-[2.2rem] shadow-xl text-base font-semibold outline-none transition-all"
+              placeholder='Ex: "Jantar leve para dois"'
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onFocus={() => setIsSearchFocused(true)}
-              // O timeout no blur permite que o clique nas sugestões seja registrado antes delas sumirem
               onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
               onKeyDown={(e) => e.key === 'Enter' && handleAskWaiter()}
             />
             <button 
-              onClick={handleAskWaiter}
+              onClick={() => handleAskWaiter()}
               disabled={isAiLoading || !searchQuery}
-              className="absolute right-2 top-2 bottom-2 px-6 orange-gradient text-white rounded-[1.4rem] font-black text-[10px] tracking-widest uppercase disabled:opacity-30 active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2"
+              className="absolute right-3 top-3 bottom-3 px-8 orange-gradient text-white rounded-[1.8rem] font-black text-[11px] tracking-widest uppercase disabled:opacity-30 transition-all shadow-xl shadow-orange-500/20 flex items-center justify-center gap-2"
             >
-              {isAiLoading ? <Loader2 size={16} className="animate-spin" /> : 'PEDIR'}
+              {isAiLoading ? <Loader2 size={16} className="animate-spin" /> : 'EXPLORAR'}
             </button>
           </div>
-        </section>
 
-        {/* ÁREA DE SUGESTÕES E CATEGORIAS STICKY */}
-        <div className="sticky-nav bg-white/95 dark:bg-zinc-950/95 backdrop-blur-xl py-4 border-b border-gray-100 dark:border-zinc-900 z-40">
-          
-          {/* QUICK SUGGESTIONS (CHIPS) - Condicionado ao foco do input */}
-          <div className={`overflow-hidden transition-all duration-500 ease-in-out ${isSearchFocused ? 'max-h-20 opacity-100 mb-4' : 'max-h-0 opacity-0 mb-0'}`}>
-            <div className="flex gap-3 overflow-x-auto hide-scrollbar px-6 snap-x snap-mandatory">
+          <div className={`overflow-hidden transition-all duration-500 ease-in-out ${isSearchFocused && !searchQuery ? 'max-h-24 opacity-100 mb-8' : 'max-h-0 opacity-0 mb-0'}`}>
+            <div className="flex gap-3 overflow-x-auto hide-scrollbar px-1 snap-x snap-mandatory">
               {quickPrompts.map((prompt, idx) => (
                 <button 
                   key={idx}
-                  onClick={() => handleQuickAction(prompt.action)}
-                  className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 shadow-sm whitespace-nowrap hover:bg-gray-50 dark:hover:bg-zinc-800 transition-all active:scale-95 snap-start"
+                  onClick={() => handleAskWaiter(prompt.action)}
+                  className="flex items-center gap-2.5 px-6 py-4 rounded-2xl bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 shadow-lg shadow-black/5 whitespace-nowrap hover:bg-gray-50 dark:hover:bg-zinc-800 transition-all active:scale-95 snap-start"
                 >
                   {prompt.icon}
-                  <span className="text-[13px] font-semibold text-zinc-700 dark:text-zinc-300">{prompt.text}</span>
+                  <span className="text-sm font-bold text-zinc-900 dark:text-zinc-200">{prompt.text}</span>
                 </button>
               ))}
               <button 
-                  onClick={() => handleQuickAction("Quero uma sugestão aleatória e surpreendente do cardápio")}
-                  className="flex items-center gap-2 px-5 py-3 rounded-2xl orange-gradient text-white shadow-lg shadow-orange-100 dark:shadow-orange-900/20 whitespace-nowrap active:scale-95 transition-all snap-start mr-6"
+                  onClick={() => handleAskWaiter("Quero uma sugestão aleatória e surpreendente do cardápio")}
+                  className="flex items-center gap-2.5 px-6 py-4 rounded-2xl orange-gradient text-white shadow-xl shadow-orange-500/20 whitespace-nowrap active:scale-95 transition-all snap-start"
               >
                   <Sparkles size={16} />
-                  <span className="text-[13px] font-bold">Surpreenda-me</span>
+                  <span className="text-sm font-black uppercase tracking-widest">Surpreenda-me</span>
               </button>
             </div>
           </div>
 
-          {/* FILTRO DE CATEGORIAS (Sempre visível para navegação rápida) */}
-          <div className="flex gap-2 overflow-x-auto hide-scrollbar px-6 pb-1">
-            <button 
+          <div className="flex gap-4 overflow-x-auto hide-scrollbar items-center py-4 mb-4 -mx-6 px-6">
+            <CategoryIcon 
+              category={{ id: 'all', name: 'Todos', icon: '🍲', color: 'bg-orange-100' }}
+              isActive={activeCategory === null}
               onClick={() => setActiveCategory(null)}
-              className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all whitespace-nowrap border-2
-                ${activeCategory === null ? 'orange-gradient border-transparent text-white shadow-md' : 'bg-gray-50 dark:bg-zinc-900 border-gray-100 dark:border-zinc-800 text-gray-500'}`}
-            >
-              Todos
-            </button>
+            />
             {CATEGORIES.map(cat => (
-              <button 
+              <CategoryIcon 
                 key={cat.id}
+                category={cat}
+                isActive={activeCategory === cat.name}
                 onClick={() => setActiveCategory(activeCategory === cat.name ? null : cat.name)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all whitespace-nowrap border-2
-                  ${activeCategory === cat.name ? 'orange-gradient border-transparent text-white shadow-md' : 'bg-gray-50 dark:bg-zinc-900 border-gray-100 dark:border-zinc-800 text-gray-500'}`}
-              >
-                <span>{cat.icon}</span>
-                <span>{cat.name}</span>
-              </button>
+              />
             ))}
           </div>
-        </div>
+        </section>
 
-        <div id="ai-suggestions-anchor"></div>
-        {aiSuggestions.length > 0 && !isAiLoading && (
-          <section className="mt-8 px-6 mb-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 orange-gradient rounded-xl flex items-center justify-center shadow-lg shadow-orange-200">
-                <ChefHat size={20} className="text-white" />
-              </div>
-              <div>
-                <h3 className="font-black text-xl tracking-tight text-zinc-900 dark:text-zinc-50">O Garçom Sugere</h3>
-                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest italic">Personalizado para você</p>
-              </div>
-              <button onClick={() => setAiSuggestions([])} className="ml-auto text-gray-300 hover:text-zinc-900 dark:hover:text-zinc-50 p-2">
-                <X size={20} />
-              </button>
-            </div>
+        <div id="ai-suggestions-anchor" className="scroll-mt-32" />
 
-            <div className="flex gap-5 overflow-x-auto pb-6 hide-scrollbar -mx-6 px-6">
-              {aiSuggestions.map((sug, idx) => {
-                const item = MENU_ITEMS.find(i => i.id === sug.itemId);
-                if (!item) return null;
-                return (
-                  <div key={idx} className="min-w-[300px] flex flex-col gap-4">
-                    <div className="relative bg-zinc-900 dark:bg-zinc-800 text-white p-5 rounded-[2rem] border-b-4 border-orange-500 shadow-xl overflow-hidden">
-                       <div className="absolute top-0 right-0 p-4 opacity-10 rotate-12 text-orange-500">
-                          <Sparkles size={48} />
+        {aiSuggestions.length > 0 && (
+          <section className="px-6 mb-12 animate-in fade-in slide-in-from-bottom-8 duration-700">
+             <div className="bg-orange-50/50 dark:bg-orange-950/10 rounded-[3rem] p-8 border border-orange-100 dark:border-orange-500/10">
+               <div className="flex items-center gap-4 mb-8">
+                 <div className="w-14 h-14 orange-gradient rounded-2xl flex items-center justify-center text-white shadow-lg"><ChefHat size={28} /></div>
+                 <div>
+                   <h2 className="text-2xl font-black tracking-tighter">Sugestões do Garçom AI</h2>
+                   <p className="text-xs font-bold text-orange-600/60 uppercase tracking-widest">Baseado no seu pedido</p>
+                 </div>
+                 <button onClick={() => setAiSuggestions([])} className="ml-auto w-10 h-10 flex items-center justify-center rounded-full bg-white dark:bg-zinc-800 text-zinc-400"><X size={18} /></button>
+               </div>
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                 {aiSuggestions.map((suggestion, idx) => {
+                   const item = MENU_ITEMS.find(i => i.id === suggestion.itemId);
+                   if (!item) return null;
+                   return (
+                     <div key={idx} className="bg-white dark:bg-zinc-900 rounded-[2rem] p-5 shadow-xl border border-zinc-100 dark:border-zinc-800 flex flex-col h-full" onClick={() => openItemDetails(item)}>
+                       <div className="flex gap-4 mb-4">
+                         <img src={item.imageUrl} className="w-16 h-16 rounded-2xl object-cover" />
+                         <div className="flex-1 min-w-0">
+                           <h4 className="font-black text-sm truncate">{item.name}</h4>
+                           <span className="text-xs font-bold text-orange-500">R$ {item.price.toFixed(2)}</span>
+                         </div>
                        </div>
-                       <p className="text-sm font-medium leading-relaxed relative z-10 italic">
-                         "{sug.reason}"
-                       </p>
-                    </div>
-                    <div className="relative">
-                      <MenuCard item={item} isHighlighted={true} onAdd={(i) => addToCart(i, sug.quantity)} />
-                      {sug.quantity > 1 && (
-                        <div className="absolute -top-3 -right-3 w-12 h-12 orange-gradient rounded-full flex items-center justify-center text-white font-black text-lg shadow-xl border-4 border-white dark:border-zinc-900">
-                          {sug.quantity}x
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                       <p className="text-[11px] font-medium text-zinc-500 mb-6 flex-1 italic leading-relaxed">"{suggestion.reason}"</p>
+                       <button 
+                         onClick={(e) => { e.stopPropagation(); saveToCart(item, suggestion.quantity, [], [], ""); }}
+                         className="w-full py-3 orange-gradient text-white rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-orange-500/20 active:scale-95 transition-all"
+                       >
+                         <Plus size={14} /> Adicionar {suggestion.quantity}x
+                       </button>
+                     </div>
+                   );
+                 })}
+               </div>
+             </div>
           </section>
         )}
 
-        <section className="px-6 pt-10 space-y-10">
-          <div className="flex items-center justify-between">
-            <div>
-               <h3 className="text-2xl font-black tracking-tighter text-zinc-900 dark:text-zinc-50">
-                 {activeCategory || "Nosso Cardápio"}
-               </h3>
-               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Sabor artesanal em cada prato</p>
-            </div>
-            <span className="text-[10px] font-black text-zinc-400 bg-gray-50 dark:bg-zinc-900 px-3 py-1 rounded-full uppercase">{filteredItems.length} itens</span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+        <section className="px-6 pt-4 space-y-12">
+           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
             {filteredItems.map((item, idx) => (
-              <div key={item.id} className="animate-in fade-in slide-in-from-bottom-8 duration-500" style={{ animationDelay: `${idx * 50}ms` }}>
-                <MenuCard 
-                  item={item} 
-                  onAdd={(i) => addToCart(i, 1)}
-                  isHighlighted={aiSuggestions.some(s => s.itemId === item.id)} 
-                />
+              <div key={item.id} className="animate-in fade-in slide-in-from-bottom-10 duration-700" style={{ animationDelay: `${idx * 40}ms` }} onClick={() => openItemDetails(item)}>
+                <MenuCard item={item} onAdd={(i) => saveToCart(i, 1, [], [], "")} count={getItemCountInCart(item.id)} />
               </div>
             ))}
           </div>
-
-          {filteredItems.length === 0 && (
-             <div className="py-20 text-center space-y-4 opacity-50">
-                <Search size={48} className="mx-auto text-gray-300" />
-                <p className="font-bold text-gray-400 italic">Nada por aqui! Tente outra busca.</p>
-             </div>
-          )}
         </section>
       </main>
 
-      <nav className="fixed bottom-8 left-1/2 -translate-x-1/2 w-[90%] md:w-auto md:min-w-[420px] glass h-20 rounded-[2.5rem] shadow-2xl border border-white/50 dark:border-white/10 flex items-center justify-around px-8 z-[60] animate-in slide-in-from-bottom-12 duration-1000">
-        <button className="text-orange-500 flex flex-col items-center gap-1 relative">
-          <div className="w-10 h-1 bg-orange-500 absolute -top-3 rounded-full"></div>
-          <Search size={22} strokeWidth={3} />
-          <span className="text-[10px] font-black uppercase tracking-tighter">Explorar</span>
-        </button>
-        
-        <button className="text-zinc-300 dark:text-zinc-600 hover:text-orange-400 transition-colors flex flex-col items-center gap-1 group">
-          <Filter size={22} strokeWidth={2.5} className="group-hover:scale-110 transition-transform" />
-          <span className="text-[10px] font-black uppercase tracking-tighter">Filtros</span>
-        </button>
-
-        <button 
-          onClick={() => setIsCartOpen(true)}
-          className="text-zinc-300 dark:text-zinc-600 hover:text-orange-400 transition-colors flex flex-col items-center gap-1 group relative"
-        >
-          <ShoppingBag size={22} strokeWidth={2.5} className="group-hover:scale-110 transition-transform" />
-          <span className="text-[10px] font-black uppercase tracking-tighter">Pedidos</span>
-          {cart.length > 0 && <span className="absolute top-0 -right-1 w-2.5 h-2.5 bg-orange-600 rounded-full border-2 border-white dark:border-zinc-900"></span>}
-        </button>
-
-        <button className="text-zinc-300 dark:text-zinc-600 hover:text-orange-400 transition-colors flex flex-col items-center gap-1 group">
-          <User size={22} strokeWidth={2.5} className="group-hover:scale-110 transition-transform" />
-          <span className="text-[10px] font-black uppercase tracking-tighter">Perfil</span>
-        </button>
-      </nav>
+      <div className={`fixed bottom-8 left-0 right-0 flex justify-center px-6 z-[50] pointer-events-none transition-all duration-500 ${isCartOpen || isPixModalOpen || isDetailModalOpen ? 'translate-y-32 opacity-0' : 'translate-y-0 opacity-100'}`}>
+        <nav className="pointer-events-auto flex items-center gap-1 p-2 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-2xl rounded-[2.5rem] shadow-2xl border border-zinc-200/50 dark:border-white/5">
+          <button onClick={handleExploreClick} className="px-8 py-4 flex flex-col items-center gap-1.5 transition-all text-orange-500">
+            <Search size={22} strokeWidth={3} />
+            <span className="text-[10px] font-black uppercase tracking-widest">Explorar</span>
+          </button>
+          <div className="w-[1px] h-8 bg-zinc-100 dark:bg-zinc-800/50"></div>
+          <button onClick={() => setIsCartOpen(true)} className={`relative px-8 py-4 flex flex-col items-center gap-1.5 transition-all ${cart.length > 0 ? 'text-zinc-900 dark:text-white' : 'text-zinc-400'} ${isCartJiggling ? 'animate-jiggle' : ''}`}>
+            <div className="relative">
+              <ShoppingBag size={22} strokeWidth={2.5} />
+              {cart.length > 0 && <span className="absolute -top-2 -right-2 w-5 h-5 bg-orange-600 text-white text-[9px] font-black flex items-center justify-center rounded-full border-2 border-white dark:border-zinc-900">{cart.length}</span>}
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-widest">Pedidos</span>
+          </button>
+          <div className="w-[1px] h-8 bg-zinc-100 dark:bg-zinc-800/50"></div>
+          <button className="px-8 py-4 flex flex-col items-center gap-1.5 text-zinc-400">
+            <User size={22} strokeWidth={2.5} />
+            <span className="text-[10px] font-black uppercase tracking-widest">Perfil</span>
+          </button>
+        </nav>
+      </div>
     </div>
   );
 };

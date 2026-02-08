@@ -1,5 +1,5 @@
 {
-  "name": "Sabor & Arte - Menu Digital",
+  "name": "FOODAI",
   "description": "Menu inteligente do restaurante Sabor & Arte. Peça sugestões personalizadas ao nosso garçom virtual baseado em nosso cardápio real.",
   "requestFramePermissions": [
     "microphone"

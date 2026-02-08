@@ -1,144 +1,173 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { MapPin, ChevronDown, Moon, Sun, Menu, Bell, Zap, Info, Settings, LogOut, X } from 'lucide-react';
+import { MapPin, ChevronDown, Moon, Sun, Menu, Bell, Zap, Info, Settings, LogOut, X, CheckCircle2, Clock, Truck, UtensilsCrossed, Copy, User, ShoppingBag, MapPinned, Ticket } from 'lucide-react';
+import { Notification } from '../App';
 
 interface Props {
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
+  notifications: Notification[];
+  onReadNotifications: () => void;
 }
 
-const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode }) => {
+const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode, notifications, onReadNotifications }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const notifRef = useRef<HTMLDivElement>(null);
 
-  // Fechar menu ao clicar fora
+  const unreadCount = notifications.filter(n => !n.read).length;
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setIsMenuOpen(false);
-      }
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setIsMenuOpen(false);
+      if (notifRef.current && !notifRef.current.contains(event.target as Node)) setIsNotifOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  return (
-    <header className="fixed top-0 left-0 right-0 z-[100] px-4 py-3 md:px-8 md:py-5">
-      <div className="max-w-7xl mx-auto flex items-center justify-between glass border border-white/20 dark:border-white/5 shadow-[0_8px_32px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)] rounded-[2.5rem] px-5 py-3 md:px-8">
-        
-        {/* Lado Esquerdo: Logo & Branding */}
-        <div className="flex items-center gap-4 md:gap-8">
-          <div className="flex items-center gap-2 group cursor-pointer">
-            <div className="relative w-11 h-11 orange-gradient rounded-2xl flex items-center justify-center shadow-[0_4px_20px_rgba(249,115,22,0.3)] transition-all duration-500 group-hover:rotate-[10deg] group-hover:scale-110">
-              <Zap size={20} className="text-white fill-white animate-pulse" />
-              <div className="absolute -inset-1 bg-orange-400/20 blur-lg rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
-            <div className="flex flex-col -space-y-1">
-              <h1 className="text-xl md:text-2xl font-[900] tracking-tighter text-zinc-900 dark:text-zinc-50">
-                Food<span className="text-orange-500">AI</span>
-              </h1>
-              <span className="text-[8px] font-black uppercase tracking-[0.2em] text-orange-600/60 dark:text-orange-400/60 leading-none">Smart Delivery</span>
-            </div>
-          </div>
+  const handleNotifToggle = () => {
+    setIsNotifOpen(!isNotifOpen);
+    if (!isNotifOpen) onReadNotifications();
+    setIsMenuOpen(false);
+  };
 
-          {/* Localização (Desktop) */}
-          <div className="hidden lg:flex items-center gap-3 bg-white/50 dark:bg-zinc-900/50 hover:bg-white dark:hover:bg-zinc-800 px-5 py-2.5 rounded-2xl border border-zinc-100 dark:border-zinc-800 cursor-pointer transition-all duration-300 group">
-            <div className="w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-500/10 flex items-center justify-center text-orange-600">
-              <MapPin size={14} strokeWidth={2.5} />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest leading-none mb-0.5">Entregar agora</span>
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-black text-zinc-800 dark:text-zinc-100">Rua Gourmet, 456</span>
-                <ChevronDown size={12} className="text-zinc-400 group-hover:translate-y-0.5 transition-transform" />
-              </div>
-            </div>
+  const handleMenuToggle = () => {
+    setIsMenuOpen(!isMenuOpen);
+    setIsNotifOpen(false);
+  };
+
+  const getNotifIcon = (type: Notification['type']) => {
+    switch (type) {
+      case 'info': return <Clock size={16} className="text-blue-500" />;
+      case 'success': return <UtensilsCrossed size={16} className="text-purple-500" />;
+      case 'warning': return <Zap size={16} className="text-orange-500" />;
+      case 'shipping': return <Truck size={16} className="text-green-500" />;
+      default: return <Bell size={16} />;
+    }
+  };
+
+  return (
+    <header className="px-4 py-3 md:px-8 md:py-5 w-full">
+      <div className="max-w-7xl mx-auto flex items-center justify-between glass border border-white/20 dark:border-white/5 shadow-2xl rounded-[2.5rem] px-5 py-3 md:px-8">
+        
+        {/* Logo */}
+        <div className="flex items-center gap-4 group cursor-pointer">
+          <div className="w-11 h-11 orange-gradient rounded-2xl flex items-center justify-center shadow-lg transition-transform group-hover:rotate-12">
+            <Zap size={20} className="text-white fill-white" />
+          </div>
+          <div className="flex flex-col -space-y-1">
+            <h1 className="text-xl md:text-2xl font-[900] tracking-tighter text-zinc-900 dark:text-zinc-50">Food<span className="text-orange-500">AI</span></h1>
+            <span className="text-[8px] font-black uppercase tracking-[0.2em] text-orange-600/60 leading-none">Smart Delivery</span>
           </div>
         </div>
 
-        {/* Lado Direito: Notificações e Menu Central */}
-        <div className="flex items-center gap-2 md:gap-4 relative" ref={menuRef}>
+        {/* Actions Container */}
+        <div className="flex items-center gap-2">
           
           {/* Notificações */}
-          <button className="flex w-12 h-12 items-center justify-center text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-2xl transition-all group">
-            <div className="relative">
-              <Bell size={20} />
-              <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-zinc-950" />
-            </div>
-          </button>
-
-          {/* Menu Dropdown Trigger */}
-          <button 
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-all duration-300 shadow-sm ${isMenuOpen ? 'bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rotate-90' : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800'}`}
-          >
-            {isMenuOpen ? <X size={20} strokeWidth={3} /> : <Menu size={20} strokeWidth={2.5} />}
-          </button>
-
-          {/* Dropdown Menu - Fundo Sólido e Opaco */}
-          {isMenuOpen && (
-            <div className="absolute top-16 right-0 w-64 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-[0_25px_60px_rgba(0,0,0,0.2)] dark:shadow-[0_25px_60px_rgba(0,0,0,0.6)] rounded-[2.2rem] p-3 animate-in fade-in zoom-in-95 duration-200 origin-top-right z-[110]">
-              <div className="p-4 mb-2 border-b border-zinc-50 dark:border-zinc-800/50">
-                <p className="text-[10px] font-black text-orange-500 uppercase tracking-[0.2em] mb-1">Menu Principal</p>
-                <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 leading-relaxed">Personalize sua experiência na FoodAI.</p>
+          <div className="relative" ref={notifRef}>
+            <button onClick={handleNotifToggle} className={`flex w-12 h-12 items-center justify-center rounded-2xl transition-all ${isNotifOpen ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/30' : 'text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}>
+              <div className="relative">
+                <Bell size={20} />
+                {unreadCount > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[8px] font-black flex items-center justify-center rounded-full border-2 border-white dark:border-zinc-950 animate-pulse">{unreadCount}</span>}
               </div>
-              
-              <div className="space-y-1">
-                {/* Alternar Tema */}
-                <button 
-                  onClick={() => { onToggleDarkMode(); setIsMenuOpen(false); }}
-                  className="w-full flex items-center gap-3 p-3.5 rounded-2xl hover:bg-orange-50 dark:hover:bg-orange-500/10 text-zinc-700 dark:text-zinc-200 transition-all group active:scale-95"
-                >
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${isDarkMode ? 'bg-zinc-800 text-yellow-500' : 'bg-orange-100 text-orange-600'}`}>
-                    {isDarkMode ? <Sun size={18} fill="currentColor" fillOpacity={0.2} /> : <Moon size={18} fill="currentColor" fillOpacity={0.2} />}
-                  </div>
-                  <div className="flex flex-col items-start">
-                    <span className="text-[13px] font-extrabold">{isDarkMode ? 'Modo Claro' : 'Modo Escuro'}</span>
-                    <span className="text-[10px] font-medium text-zinc-400 italic">Trocar visual</span>
-                  </div>
-                </button>
+            </button>
 
-                {/* Sobre */}
-                <button 
-                  className="w-full flex items-center gap-3 p-3.5 rounded-2xl hover:bg-orange-50 dark:hover:bg-orange-500/10 text-zinc-700 dark:text-zinc-200 transition-all group active:scale-95"
-                  onClick={() => { setIsMenuOpen(false); alert('FoodAI v1.0 - Transformando delivery com inteligência artificial.'); }}
-                >
-                  <div className="w-9 h-9 bg-zinc-100 dark:bg-zinc-800 rounded-xl flex items-center justify-center text-zinc-400 dark:text-zinc-500 group-hover:text-orange-500 transition-colors">
-                    <Info size={18} />
-                  </div>
-                  <div className="flex flex-col items-start">
-                    <span className="text-[13px] font-extrabold">Sobre o FoodAI</span>
-                    <span className="text-[10px] font-medium text-zinc-400 italic">Versão e info</span>
-                  </div>
-                </button>
+            {isNotifOpen && (
+              <div className="absolute top-16 right-0 w-80 max-h-[80vh] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl rounded-[2.2rem] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200 origin-top-right z-[150]">
+                 <div className="p-5 border-b border-zinc-50 dark:border-zinc-800/50 bg-zinc-50 dark:bg-zinc-800/20"><h4 className="font-black text-xs uppercase tracking-widest text-zinc-500">Notificações</h4></div>
+                 <div className="overflow-y-auto hide-scrollbar p-3 space-y-2">
+                    {notifications.length === 0 ? (
+                      <div className="py-12 text-center text-xs font-bold text-zinc-400 italic">Nada por aqui.</div>
+                    ) : (
+                      notifications.map((notif) => (
+                        <div key={notif.id} className={`p-4 rounded-[1.5rem] border ${notif.read ? 'bg-white dark:bg-zinc-900 border-transparent' : 'bg-orange-50/50 dark:bg-orange-500/5 border-orange-100 dark:border-orange-500/20 shadow-sm'}`}>
+                          <div className="flex gap-4">
+                             <div className="w-10 h-10 rounded-2xl bg-white dark:bg-zinc-800 flex items-center justify-center shadow-sm">{getNotifIcon(notif.type)}</div>
+                             <div className="flex-1">
+                                <div className="flex justify-between items-start mb-0.5">
+                                   <p className="font-extrabold text-[13px] leading-tight text-zinc-900 dark:text-zinc-100">{notif.title}</p>
+                                   <span className="text-[9px] font-bold text-zinc-400 uppercase">{notif.time}</span>
+                                </div>
+                                <p className="text-[11px] font-medium text-zinc-500 leading-relaxed mb-3">{notif.message}</p>
+                                
+                                {notif.extraAction && (
+                                  <button 
+                                    onClick={notif.extraAction.onClick}
+                                    className="w-full py-2 bg-orange-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-orange-600 active:scale-95 transition-all"
+                                  >
+                                    <Copy size={12} />
+                                    {notif.extraAction.label}
+                                  </button>
+                                )}
+                             </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                 </div>
+              </div>
+            )}
+          </div>
 
-                {/* Configurações (Extra) */}
-                <button 
-                  className="w-full flex items-center gap-3 p-3.5 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800/50 text-zinc-700 dark:text-zinc-200 transition-all group active:scale-95"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  <div className="w-9 h-9 bg-zinc-100 dark:bg-zinc-800 rounded-xl flex items-center justify-center text-zinc-400 dark:text-zinc-500 group-hover:text-zinc-900 dark:group-hover:text-zinc-100 transition-colors">
-                    <Settings size={18} />
-                  </div>
-                  <div className="flex flex-col items-start">
-                    <span className="text-[13px] font-extrabold">Ajustes</span>
-                    <span className="text-[10px] font-medium text-zinc-400 italic">Preferências</span>
-                  </div>
-                </button>
+          {/* User Menu Dropdown com Tema Integrado */}
+          <div className="relative" ref={menuRef}>
+            <button 
+              onClick={handleMenuToggle} 
+              className={`flex w-12 h-12 items-center justify-center rounded-2xl transition-all ${isMenuOpen ? 'bg-zinc-900 dark:bg-zinc-50 text-white dark:text-zinc-900' : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-50'}`}
+            >
+              <Menu size={20} />
+            </button>
 
-                <div className="h-[1px] bg-zinc-100 dark:bg-zinc-800 my-2 mx-3" />
+            {isMenuOpen && (
+              <div className="absolute top-16 right-0 w-64 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl rounded-[2.2rem] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200 origin-top-right z-[150]">
+                <div className="p-5 bg-zinc-50 dark:bg-zinc-800/30 border-b border-zinc-100 dark:border-zinc-800 flex items-center gap-3">
+                   <div className="w-10 h-10 orange-gradient rounded-full flex items-center justify-center text-white font-black">JD</div>
+                   <div className="flex flex-col">
+                      <span className="text-[13px] font-black text-zinc-900 dark:text-zinc-50">John Doe</span>
+                      <span className="text-[10px] font-bold text-zinc-400">Premium Member</span>
+                   </div>
+                </div>
+                
+                <div className="p-3 space-y-1">
+                  {/* Tema no Dropdown */}
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); onToggleDarkMode(); }} 
+                    className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all text-zinc-500 hover:text-orange-500 group"
+                  >
+                    {isDarkMode ? <Sun size={18} className="group-hover:scale-110 transition-transform" /> : <Moon size={18} className="group-hover:scale-110 transition-transform" />}
+                    <span className="text-xs font-black uppercase tracking-widest">
+                      {isDarkMode ? 'Modo Claro' : 'Modo Escuro'}
+                    </span>
+                  </button>
 
-                <button className="w-full flex items-center gap-3 p-3.5 rounded-2xl hover:bg-red-50 dark:hover:bg-red-500/10 text-red-500 transition-all active:scale-95">
-                  <div className="w-9 h-9 bg-red-50 dark:bg-red-500/10 rounded-xl flex items-center justify-center">
+                  <button className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all text-zinc-500 hover:text-orange-500 group">
+                    <User size={18} className="group-hover:scale-110 transition-transform" />
+                    <span className="text-xs font-black uppercase tracking-widest">Meu Perfil</span>
+                  </button>
+                  <button className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all text-zinc-500 hover:text-orange-500 group">
+                    <ShoppingBag size={18} className="group-hover:scale-110 transition-transform" />
+                    <span className="text-xs font-black uppercase tracking-widest">Meus Pedidos</span>
+                  </button>
+                  <button className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all text-zinc-500 hover:text-orange-500 group">
+                    <Ticket size={18} className="group-hover:scale-110 transition-transform" />
+                    <span className="text-xs font-black uppercase tracking-widest">Meus Cupons</span>
+                  </button>
+                </div>
+
+                <div className="p-3 border-t border-zinc-50 dark:border-zinc-800">
+                  <button className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-red-50 dark:hover:bg-red-950/20 transition-all text-zinc-400 hover:text-red-500 group">
                     <LogOut size={18} />
-                  </div>
-                  <span className="text-[13px] font-extrabold uppercase tracking-tight">Encerrar Sessão</span>
-                </button>
+                    <span className="text-xs font-black uppercase tracking-widest">Sair</span>
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
 
+        </div>
       </div>
     </header>
   );
