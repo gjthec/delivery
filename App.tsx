@@ -48,7 +48,7 @@ const App: React.FC = () => {
     
     if (activeFilter === FilterType.Cheapest) return matchesSearch && matchesCategory && item.price < 30;
     if (activeFilter === FilterType.MostExpensive) return matchesSearch && matchesCategory && item.price > 60;
-    if (activeFilter === FilterType.Healthy) return matchesSearch && matchesCategory && (item.tags.includes('Leve') || item.category === 'Entradas');
+    if (activeFilter === FilterType.Healthy) return matchesSearch && matchesCategory && (item.tags.includes('Leve') || item.tags.includes('Saudável'));
     if (activeFilter === FilterType.LargePortion) return matchesSearch && matchesCategory && item.size === 'G';
     
     return matchesSearch && matchesCategory;
@@ -165,14 +165,14 @@ const App: React.FC = () => {
           </div>
         </section>
 
-        {/* QUICK SUGGESTIONS (CHIPS) - MELHORADO PARA MOBILE */}
+        {/* QUICK SUGGESTIONS (CHIPS) */}
         <div className="sticky-nav bg-white/95 dark:bg-zinc-950/95 backdrop-blur-xl py-4 border-b border-gray-100 dark:border-zinc-900 z-40">
           <div className="flex gap-3 overflow-x-auto hide-scrollbar px-6 snap-x snap-mandatory">
             {quickPrompts.map((prompt, idx) => (
               <button 
                 key={idx}
                 onClick={() => handleQuickAction(prompt.action)}
-                className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 shadow-sm whitespace-nowrap hover:bg-gray-50 dark:hover:bg-zinc-800 transition-all active:scale-95 snap-start first:ml-0"
+                className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 shadow-sm whitespace-nowrap hover:bg-gray-50 dark:hover:bg-zinc-800 transition-all active:scale-95 snap-start"
               >
                 {prompt.icon}
                 <span className="text-[13px] font-semibold text-zinc-700 dark:text-zinc-300">{prompt.text}</span>
@@ -185,6 +185,28 @@ const App: React.FC = () => {
                 <Sparkles size={16} />
                 <span className="text-[13px] font-bold">Surpreenda-me</span>
             </button>
+          </div>
+
+          {/* FILTRO DE CATEGORIAS REALISTA */}
+          <div className="flex gap-2 overflow-x-auto hide-scrollbar px-6 mt-4 pb-1">
+            <button 
+              onClick={() => setActiveCategory(null)}
+              className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all whitespace-nowrap border-2
+                ${activeCategory === null ? 'orange-gradient border-transparent text-white shadow-md' : 'bg-gray-50 dark:bg-zinc-900 border-gray-100 dark:border-zinc-800 text-gray-500'}`}
+            >
+              Todos
+            </button>
+            {CATEGORIES.map(cat => (
+              <button 
+                key={cat.id}
+                onClick={() => setActiveCategory(activeCategory === cat.name ? null : cat.name)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all whitespace-nowrap border-2
+                  ${activeCategory === cat.name ? 'orange-gradient border-transparent text-white shadow-md' : 'bg-gray-50 dark:bg-zinc-900 border-gray-100 dark:border-zinc-800 text-gray-500'}`}
+              >
+                <span>{cat.icon}</span>
+                <span>{cat.name}</span>
+              </button>
+            ))}
           </div>
         </div>
 
@@ -237,13 +259,18 @@ const App: React.FC = () => {
         {/* MENU LIST */}
         <section className="px-6 pt-10 space-y-10">
           <div className="flex items-center justify-between">
-            <h3 className="text-2xl font-black tracking-tighter text-zinc-900 dark:text-zinc-50">Nosso Cardápio</h3>
-            <span className="text-[10px] font-black text-zinc-400 uppercase">{filteredItems.length} itens</span>
+            <div>
+               <h3 className="text-2xl font-black tracking-tighter text-zinc-900 dark:text-zinc-50">
+                 {activeCategory || "Nosso Cardápio"}
+               </h3>
+               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Descubra novos sabores</p>
+            </div>
+            <span className="text-[10px] font-black text-zinc-400 bg-gray-50 dark:bg-zinc-900 px-3 py-1 rounded-full uppercase">{filteredItems.length} itens</span>
           </div>
 
-          <div className="grid grid-cols-1 gap-10">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
             {filteredItems.map((item, idx) => (
-              <div key={item.id} className="animate-in fade-in slide-in-from-bottom-8 duration-500" style={{ animationDelay: `${idx * 100}ms` }}>
+              <div key={item.id} className="animate-in fade-in slide-in-from-bottom-8 duration-500" style={{ animationDelay: `${idx * 50}ms` }}>
                 <MenuCard 
                   item={item} 
                   onAdd={(i) => addToCart(i, 1)}
@@ -252,6 +279,13 @@ const App: React.FC = () => {
               </div>
             ))}
           </div>
+
+          {filteredItems.length === 0 && (
+             <div className="py-20 text-center space-y-4 opacity-50">
+                <Search size={48} className="mx-auto text-gray-300" />
+                <p className="font-bold text-gray-400 italic">Nenhum prato encontrado com esses critérios.</p>
+             </div>
+          )}
         </section>
       </main>
 
