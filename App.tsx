@@ -303,13 +303,13 @@ const App: React.FC = () => {
           </div>
 
           <div className="relative group mb-8">
-            <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none transition-colors text-orange-500">
+            <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none transition-colors text-orange-500 z-10">
                {isAiLoading ? <Loader2 size={22} className="animate-spin" /> : <Sparkles size={22} />}
             </div>
             <input
               ref={searchInputRef}
               type="text"
-              className="w-full pl-14 pr-32 py-6 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-[2.2rem] shadow-xl text-base font-semibold outline-none transition-all"
+              className="w-full pl-14 pr-20 py-5 md:py-6 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-[2.2rem] shadow-xl text-sm md:text-base font-semibold outline-none transition-all placeholder:truncate"
               placeholder='Ex: "Jantar leve para dois"'
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -320,9 +320,9 @@ const App: React.FC = () => {
             <button 
               onClick={() => handleAskWaiter()}
               disabled={isAiLoading || !searchQuery}
-              className="absolute right-3 top-3 bottom-3 px-8 orange-gradient text-white rounded-[1.8rem] font-black text-[11px] tracking-widest uppercase disabled:opacity-30 transition-all shadow-xl shadow-orange-500/20 flex items-center justify-center gap-2"
+              className="absolute right-2.5 top-2.5 bottom-2.5 aspect-square orange-gradient text-white rounded-full flex items-center justify-center shadow-xl shadow-orange-500/20 disabled:opacity-30 transition-all active:scale-90"
             >
-              {isAiLoading ? <Loader2 size={16} className="animate-spin" /> : 'EXPLORAR'}
+              {isAiLoading ? <Loader2 size={20} className="animate-spin" /> : <Search size={20} strokeWidth={3} />}
             </button>
           </div>
 
