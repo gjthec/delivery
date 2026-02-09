@@ -7,9 +7,10 @@ import CartDrawer from './components/CartDrawer';
 import PixPaymentModal from './components/PixPaymentModal';
 import CategoryIcon from './components/CategoryIcon';
 import ItemDetailModal from './components/ItemDetailModal';
-import { MENU_ITEMS, CATEGORIES } from './constants';
+import { MENU_ITEMS, CATEGORIES, IS_FIREBASE_ON } from './constants';
 import { MenuItem, FilterType, CartItem, ExtraItem, Address, PaymentType, CardBrand } from './types';
 import { askWaiter } from './services/geminiService';
+import { saveOrderToFirebase, FirebaseOrder } from './services/firebaseService';
 
 interface AiSuggestion {
   itemId: string;
@@ -169,7 +170,37 @@ const App: React.FC = () => {
     window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${message}`, '_blank');
   };
 
-  const handleCheckout = (details: { payment: { type: PaymentType, brand?: CardBrand, changeFor?: string }, address: Address }) => {
+  const processOrderToDatabase = async (details: any, items: CartItem[], total: number) => {
+    const orderForDb: FirebaseOrder = {
+      items: items.map(ci => ({
+        id: ci.item.id,
+        name: ci.item.name,
+        quantity: ci.quantity,
+        price: ci.item.price,
+        customizations: {
+          removed: ci.removedIngredients,
+          extras: ci.selectedExtras.map(e => e.name),
+          obs: ci.observations
+        }
+      })),
+      customer: {
+        name: "John Doe", // Mock name, ideally comes from auth
+        phone: WHATSAPP_NUMBER,
+        address: details.address
+      },
+      payment: {
+        method: details.payment.type,
+        brand: details.payment.brand,
+        total: total
+      },
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
+
+    await saveOrderToFirebase(orderForDb);
+  };
+
+  const handleCheckout = async (details: { payment: { type: PaymentType, brand?: CardBrand, changeFor?: string }, address: Address }) => {
     if (cart.length === 0) return;
     
     const subtotal = cart.reduce((acc, ci) => {
@@ -183,6 +214,11 @@ const App: React.FC = () => {
     setLastOrderDetails(details);
     setIsCartOpen(false);
 
+    // Se Firebase estiver On, salva no banco ANTES de qualquer coisa
+    if (IS_FIREBASE_ON) {
+      await processOrderToDatabase(details, cart, finalTotal);
+    }
+
     if (details.payment.type === 'pix') {
       setIsPixModalOpen(true);
     } else {
@@ -191,8 +227,12 @@ const App: React.FC = () => {
     }
   };
 
-  const handlePixConfirmed = () => {
+  const handlePixConfirmed = async () => {
     if (lastOrderDetails) {
+      // Se não salvou no checkout (ex: por erro), tenta garantir o salvamento aqui se a flag estiver on
+      if (IS_FIREBASE_ON) {
+        await processOrderToDatabase(lastOrderDetails, cart, currentTotal);
+      }
       sendWhatsAppMessage(lastOrderDetails, cart, currentTotal);
     }
     setCart([]); 

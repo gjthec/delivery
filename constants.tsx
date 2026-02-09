@@ -1,6 +1,11 @@
 
 import { MenuItem, Category } from './types';
 
+// Flag de controle para integração com Firebase
+// Mantenha como false para uso offline/WhatsApp puro.
+// Mude para true quando configurar o Firebase SDK.
+export const IS_FIREBASE_ON = true;
+
 export const CATEGORIES: Category[] = [
   { id: '0', name: 'Promoções', icon: '🏷️', color: 'bg-red-100' },
   { id: '1', name: 'Entradas', icon: '🥗', color: 'bg-green-100' },
