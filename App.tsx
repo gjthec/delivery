@@ -45,13 +45,13 @@ const App: React.FC = () => {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   
   const PIX_CODE = "00020126330014br.gov.bcb.pix0111123456789015204000053039865802BR5925FoodAI Restaurantes6009Sao Paulo62070503***6304E2D1";
-  const WHATSAPP_NUMBER = "5511999999999"; 
+  const WHATSAPP_NUMBER = "5535998842525"; 
 
   const [notifications, setNotifications] = useState<Notification[]>([
     {
       id: 'notif-initial-1',
       title: '🏷️ Cupom Ativo!',
-      message: 'Use FOODAI10 e ganhe R$ 10,00 de desconto no seu primeiro pedido acima de R$ 50,00.',
+      message: 'Use FOODAI15 e ganhe 15% de desconto no seu pedido!',
       type: 'warning',
       time: '2h atrás',
       read: false
@@ -105,7 +105,6 @@ const App: React.FC = () => {
 
   const saveToCart = (item: MenuItem, quantity: number, removedIngredients: string[], selectedExtras: ExtraItem[], observations: string) => {
     if (editingCartIndex !== null) {
-      // Atualizar item existente
       const updatedCart = [...cart];
       updatedCart[editingCartIndex] = {
         ...updatedCart[editingCartIndex],
@@ -117,7 +116,6 @@ const App: React.FC = () => {
       setCart(updatedCart);
       setEditingCartIndex(null);
     } else {
-      // Adicionar novo item
       const newCartItem: CartItem = {
         cartId: Math.random().toString(36).substr(2, 9),
         item,
@@ -146,23 +144,57 @@ const App: React.FC = () => {
     setIsDetailModalOpen(true);
   };
 
+  const sendWhatsAppMessage = (details: any, items: CartItem[], total: number) => {
+    let message = `*🍔 NOVO PEDIDO - FoodAI*%0A%0A`;
+    message += `*Itens do Pedido:*%0A`;
+    items.forEach(ci => {
+      const extras = ci.selectedExtras.length > 0 ? ` (+ ${ci.selectedExtras.map(e => e.name).join(', ')})` : '';
+      const removed = ci.removedIngredients.length > 0 ? ` (sem ${ci.removedIngredients.join(', ')})` : '';
+      message += `• ${ci.quantity}x ${ci.item.name}${extras}${removed}%0A`;
+      if (ci.observations) message += `   _Obs: ${ci.observations}_%0A`;
+    });
+    
+    message += `%0A*Endereço de Entrega:*%0A`;
+    message += `${details.address.label}: ${details.address.street}, ${details.address.number}`;
+    if (details.address.complement) message += ` (${details.address.complement})`;
+    message += `%0A${details.address.neighborhood}, ${details.address.city}/${details.address.state}%0A`;
+    
+    message += `%0A*Pagamento:* ${details.payment.type.toUpperCase()}`;
+    if (details.payment.brand) message += ` - Bandeira: ${details.payment.brand.toUpperCase()}`;
+    if (details.payment.changeFor) message += `%0A*Troco para:* R$ ${details.payment.changeFor}`;
+    
+    message += `%0A%0A*VALOR TOTAL: R$ ${total.toFixed(2)}*`;
+    message += `%0A%0A_Enviado via FoodAI App_`;
+    
+    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${message}`, '_blank');
+  };
+
   const handleCheckout = (details: { payment: { type: PaymentType, brand?: CardBrand, changeFor?: string }, address: Address }) => {
     if (cart.length === 0) return;
+    
     const subtotal = cart.reduce((acc, ci) => {
       const extrasTotal = ci.selectedExtras.reduce((ea, ec) => ea + ec.price, 0);
       return acc + ((ci.item.price + extrasTotal) * ci.quantity);
     }, 0);
-    setCurrentTotal(subtotal);
+    const deliveryFee = 5.90;
+    const finalTotal = subtotal + deliveryFee;
+
+    setCurrentTotal(finalTotal);
     setLastOrderDetails(details);
     setIsCartOpen(false);
+
     if (details.payment.type === 'pix') {
       setIsPixModalOpen(true);
     } else {
+      sendWhatsAppMessage(details, cart, finalTotal);
       setCart([]); 
     }
   };
 
   const handlePixConfirmed = () => {
+    if (lastOrderDetails) {
+      sendWhatsAppMessage(lastOrderDetails, cart, currentTotal);
+    }
     setCart([]); 
     setIsPixModalOpen(false);
   };
@@ -212,6 +244,9 @@ const App: React.FC = () => {
     observations: cart[editingCartIndex].observations,
     quantity: cart[editingCartIndex].quantity
   } : null;
+
+  // Condição para esconder o footer (Modais abertos OU input em foco)
+  const shouldHideFooter = isCartOpen || isPixModalOpen || isDetailModalOpen || isSearchFocused;
 
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950 transition-colors duration-300 pb-44 text-zinc-900 dark:text-zinc-50 font-sans selection:bg-orange-100 selection:text-orange-900 overflow-x-hidden">
@@ -382,7 +417,7 @@ const App: React.FC = () => {
         </section>
       </main>
 
-      <div className={`fixed bottom-8 left-0 right-0 flex justify-center px-6 z-[50] pointer-events-none transition-all duration-500 ${isCartOpen || isPixModalOpen || isDetailModalOpen ? 'translate-y-32 opacity-0' : 'translate-y-0 opacity-100'}`}>
+      <div className={`fixed bottom-8 left-0 right-0 flex justify-center px-6 z-[50] pointer-events-none transition-all duration-500 ${shouldHideFooter ? 'translate-y-32 opacity-0' : 'translate-y-0 opacity-100'}`}>
         <nav className="pointer-events-auto flex items-center gap-1 p-2 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-2xl rounded-[2.5rem] shadow-2xl border border-zinc-200/50 dark:border-white/5">
           <button onClick={handleExploreClick} className="px-8 py-4 flex flex-col items-center gap-1.5 transition-all text-orange-500">
             <Search size={22} strokeWidth={3} />
