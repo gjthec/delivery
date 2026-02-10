@@ -7,10 +7,10 @@ import CartDrawer from './components/CartDrawer';
 import PixPaymentModal from './components/PixPaymentModal';
 import CategoryIcon from './components/CategoryIcon';
 import ItemDetailModal from './components/ItemDetailModal';
-import { MENU_ITEMS, CATEGORIES, IS_FIREBASE_ON } from './constants';
-import { MenuItem, FilterType, CartItem, ExtraItem, Address, PaymentType, CardBrand } from './types';
+import { MENU_ITEMS as STATIC_MENU, CATEGORIES as STATIC_CATEGORIES, IS_FIREBASE_ON } from './constants';
+import { MenuItem, FilterType, CartItem, ExtraItem, Address, PaymentType, CardBrand, Category } from './types';
 import { askWaiter } from './services/geminiService';
-import { saveOrderToFirebase, FirebaseOrder } from './services/firebaseService';
+import { saveOrderToFirebase, FirebaseOrder, fetchMenuFromFirebase, fetchCategoriesFromFirebase } from './services/firebaseService';
 
 interface AiSuggestion {
   itemId: string;
@@ -29,6 +29,12 @@ export interface Notification {
 }
 
 const App: React.FC = () => {
+  // Dados dinâmicos (Menu e Categorias)
+  const [menuItems, setMenuItems] = useState<MenuItem[]>(STATIC_MENU);
+  const [categories, setCategories] = useState<Category[]>(STATIC_CATEGORIES);
+  const [isLoadingData, setIsLoadingData] = useState(false);
+
+  // Estados de UI
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [aiSuggestions, setAiSuggestions] = useState<AiSuggestion[]>([]);
@@ -40,7 +46,6 @@ const App: React.FC = () => {
   const [isPixModalOpen, setIsPixModalOpen] = useState(false);
   const [currentTotal, setCurrentTotal] = useState(0);
   const [lastOrderDetails, setLastOrderDetails] = useState<any>(null);
-  
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [editingCartIndex, setEditingCartIndex] = useState<number | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -67,6 +72,24 @@ const App: React.FC = () => {
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
 
+  // Efeito para carregar dados do Firebase ao iniciar
+  useEffect(() => {
+    if (IS_FIREBASE_ON) {
+      const loadFirebaseData = async () => {
+        setIsLoadingData(true);
+        const [fbMenu, fbCategories] = await Promise.all([
+          fetchMenuFromFirebase(),
+          fetchCategoriesFromFirebase()
+        ]);
+        
+        if (fbMenu) setMenuItems(fbMenu);
+        if (fbCategories) setCategories(fbCategories);
+        setIsLoadingData(false);
+      };
+      loadFirebaseData();
+    }
+  }, []);
+
   useEffect(() => {
     localStorage.setItem('foodai-theme', darkMode ? 'dark' : 'light');
     if (darkMode) {
@@ -84,7 +107,7 @@ const App: React.FC = () => {
     }
   }, [isCartOpen, isPixModalOpen, isDetailModalOpen]);
 
-  const filteredItems = MENU_ITEMS.filter(item => {
+  const filteredItems = menuItems.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           item.description.toLowerCase().includes(searchQuery.toLowerCase());
     
@@ -184,7 +207,7 @@ const App: React.FC = () => {
         }
       })),
       customer: {
-        name: "John Doe", // Mock name, ideally comes from auth
+        name: "John Doe",
         phone: WHATSAPP_NUMBER,
         address: details.address
       },
@@ -214,7 +237,6 @@ const App: React.FC = () => {
     setLastOrderDetails(details);
     setIsCartOpen(false);
 
-    // Se Firebase estiver On, salva no banco ANTES de qualquer coisa
     if (IS_FIREBASE_ON) {
       await processOrderToDatabase(details, cart, finalTotal);
     }
@@ -229,7 +251,6 @@ const App: React.FC = () => {
 
   const handlePixConfirmed = async () => {
     if (lastOrderDetails) {
-      // Se não salvou no checkout (ex: por erro), tenta garantir o salvamento aqui se a flag estiver on
       if (IS_FIREBASE_ON) {
         await processOrderToDatabase(lastOrderDetails, cart, currentTotal);
       }
@@ -252,7 +273,8 @@ const App: React.FC = () => {
     setAiSuggestions([]);
     setIsSearchFocused(false);
     
-    const result = await askWaiter(finalQuery);
+    // Passamos o menuItems (que pode ser do Firebase) para a IA
+    const result = await askWaiter(finalQuery, menuItems);
     if (result?.suggestions) {
         setAiSuggestions(result.suggestions);
         setTimeout(() => {
@@ -285,12 +307,19 @@ const App: React.FC = () => {
     quantity: cart[editingCartIndex].quantity
   } : null;
 
-  // Condição para esconder o footer (Modais abertos OU input em foco)
   const shouldHideFooter = isCartOpen || isPixModalOpen || isDetailModalOpen || isSearchFocused;
 
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950 transition-colors duration-300 pb-44 text-zinc-900 dark:text-zinc-50 font-sans selection:bg-orange-100 selection:text-orange-900 overflow-x-hidden">
       
+      {/* Loading Overlay for Firebase */}
+      {isLoadingData && (
+        <div className="fixed inset-0 z-[300] bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md flex flex-col items-center justify-center gap-4">
+          <Loader2 size={40} className="text-orange-500 animate-spin" />
+          <p className="font-black text-xs uppercase tracking-[0.3em] text-orange-600">Sincronizando Cardápio...</p>
+        </div>
+      )}
+
       <div className={`fixed top-0 left-0 right-0 z-[100] transition-all duration-500 ease-in-out ${isCartOpen || isPixModalOpen || isDetailModalOpen ? '-translate-y-full opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'}`}>
         <Header 
           isDarkMode={darkMode}
@@ -394,7 +423,7 @@ const App: React.FC = () => {
               isActive={activeCategory === null}
               onClick={() => setActiveCategory(null)}
             />
-            {CATEGORIES.map(cat => (
+            {categories.map(cat => (
               <CategoryIcon 
                 key={cat.id}
                 category={cat}
@@ -420,7 +449,7 @@ const App: React.FC = () => {
                </div>
                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                  {aiSuggestions.map((suggestion, idx) => {
-                   const item = MENU_ITEMS.find(i => i.id === suggestion.itemId);
+                   const item = menuItems.find(i => i.id === suggestion.itemId);
                    if (!item) return null;
                    return (
                      <div key={idx} className="bg-white dark:bg-zinc-900 rounded-[2rem] p-5 shadow-xl border border-zinc-100 dark:border-zinc-800 flex flex-col h-full" onClick={() => openItemDetails(item)}>

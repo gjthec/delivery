@@ -1,21 +1,24 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { MENU_ITEMS } from "../constants";
+import { MenuItem } from "../types";
 
-export async function askWaiter(query: string) {
+/**
+ * Pergunta ao garçom virtual usando o cardápio atual (estático ou do Firebase)
+ */
+export async function askWaiter(query: string, currentMenu: MenuItem[]) {
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: `Você é o Garçom Virtual do restaurante "Sabor & Arte".
-      Seu cardápio: ${JSON.stringify(MENU_ITEMS)}.
+      Seu cardápio atualizado: ${JSON.stringify(currentMenu)}.
       
       O cliente perguntou: "${query}".
       
       Sua tarefa:
-      1. Identifique TODOS os itens do cardápio que ele deseja.
-      2. Para cada item, identifique a QUANTIDADE.
-      3. Forneça uma explicação personalizada para cada item sugerido.
+      1. Identifique TODOS os itens do cardápio que ele deseja ou que combinam com o pedido.
+      2. Para cada item, identifique a QUANTIDADE sugerida.
+      3. Forneça uma explicação personalizada e curta para cada item sugerido, sendo muito gentil.
       
       Responda APENAS em JSON seguindo o esquema de um array de sugestões.`,
       config: {

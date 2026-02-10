@@ -1,7 +1,9 @@
+
 import { IS_FIREBASE_ON } from '../constants';
 import { db } from '../firebaseConfig';
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
-import { CartItem, Address, PaymentType, CardBrand } from '../types';
+import { collection, addDoc, getDocs, serverTimestamp } from "firebase/firestore";
+import { CartItem, Address, PaymentType, CardBrand, MenuItem, Category } from '../types';
+
 /**
  * Interface para representar a estrutura de um pedido no banco de dados
  */
@@ -36,23 +38,16 @@ export interface FirebaseOrder {
  */
 export async function saveOrderToFirebase(orderData: FirebaseOrder): Promise<boolean> {
   if (!IS_FIREBASE_ON) {
-    console.log("[Firebase] Integração desativada. Pedido processado localmente.");
+    console.log("[Firebase] Integração desativada no momento (IS_FIREBASE_ON = false).");
     return true; 
   }
 
   try {
-    console.log("[Firebase] Gravando pedido no Firestore...");
-    
-    // Referência para a coleção "orders"
     const ordersRef = collection(db, "orders");
-    
-    // Adiciona o documento com timestamp do servidor para maior precisão
     await addDoc(ordersRef, {
       ...orderData,
       serverTimestamp: serverTimestamp()
     });
-
-    console.log("[Firebase] Pedido salvo com sucesso!");
     return true;
   } catch (error) {
     console.error("[Firebase] Erro ao salvar pedido:", error);
@@ -61,10 +56,35 @@ export async function saveOrderToFirebase(orderData: FirebaseOrder): Promise<boo
 }
 
 /**
- * Futura função para sincronizar estoque do painel administrativo
+ * Busca todos os itens do cardápio no Firestore.
  */
-export async function syncMenuFromFirebase(): Promise<any[] | null> {
+export async function fetchMenuFromFirebase(): Promise<MenuItem[] | null> {
   if (!IS_FIREBASE_ON) return null;
-  // Aqui você implementaria o getDocs para a coleção "menu"
-  return [];
+  try {
+    const querySnapshot = await getDocs(collection(db, "menu"));
+    return querySnapshot.docs.map(doc => ({
+      ...doc.data(),
+      id: doc.id // Usa o ID do documento do Firestore
+    } as MenuItem));
+  } catch (error) {
+    console.error("[Firebase] Erro ao buscar menu:", error);
+    return null;
+  }
+}
+
+/**
+ * Busca todas as categorias no Firestore.
+ */
+export async function fetchCategoriesFromFirebase(): Promise<Category[] | null> {
+  if (!IS_FIREBASE_ON) return null;
+  try {
+    const querySnapshot = await getDocs(collection(db, "categories"));
+    return querySnapshot.docs.map(doc => ({
+      ...doc.data(),
+      id: doc.id
+    } as Category));
+  } catch (error) {
+    console.error("[Firebase] Erro ao buscar categorias:", error);
+    return null;
+  }
 }
