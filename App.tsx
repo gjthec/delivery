@@ -184,29 +184,25 @@ const App: React.FC = () => {
     window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${message}`, '_blank');
   };
 
+  const generateOrderId = () => `PED-${Date.now().toString().slice(-6)}`;
+
   const processOrderToDatabase = async (details: any, items: CartItem[], total: number) => {
     const orderForDb: FirebaseOrder = {
+      id: generateOrderId(),
+      customerName: 'Cliente FoodAI',
       items: items.map(ci => ({
-        id: ci.item.id,
-        name: ci.item.name,
+        menuItem: ci.item,
         quantity: ci.quantity,
-        price: ci.item.price,
-        customizations: {
-          removed: ci.removedIngredients,
-          extras: ci.selectedExtras.map(e => e.name),
-          obs: ci.observations
-        }
+        removedIngredients: ci.removedIngredients,
+        selectedExtras: ci.selectedExtras,
+        observations: ci.observations
       })),
-      customer: {
-        name: "John Doe", // Mock name, ideally comes from auth
-        phone: WHATSAPP_NUMBER,
-        address: details.address
-      },
+      total,
       payment: {
         method: details.payment.type,
-        brand: details.payment.brand,
-        total: total
+        brand: details.payment.brand
       },
+      address: details.address,
       status: 'pending',
       createdAt: new Date().toISOString()
     };

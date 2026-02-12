@@ -6,28 +6,22 @@ import { Address, PaymentType, CardBrand, MenuItem } from '../types';
  * Interface para representar a estrutura de um pedido no banco de dados
  */
 export interface FirebaseOrder {
+  id: string;
+  customerName: string;
   items: {
-    id: string;
-    name: string;
+    menuItem: MenuItem;
     quantity: number;
-    price: number;
-    customizations: {
-      removed: string[];
-      extras: string[];
-      obs: string;
-    };
+    removedIngredients: string[];
+    selectedExtras: { name: string; price: number }[];
+    observations?: string;
   }[];
-  customer: {
-    name: string;
-    phone: string;
-    address: Address;
-  };
+  total: number;
   payment: {
     method: PaymentType;
     brand?: CardBrand;
-    total: number;
   };
-  status: 'pending' | 'confirmed' | 'preparing' | 'shipping' | 'delivered' | 'cancelled';
+  address: Address;
+  status: 'pending' | 'preparing' | 'shipping' | 'completed' | 'cancelled';
   createdAt: string;
 }
 
@@ -42,8 +36,8 @@ export async function saveOrderToFirebase(orderData: FirebaseOrder): Promise<boo
 
   try {
     console.log("[Firebase] Gravando pedido no Firestore...");
-    // Referência para a coleção "orders"
-    const ordersRef = collection(db, "orders");
+    // Referência para a coleção "foodai/admin/orders"
+    const ordersRef = collection(db, "foodai", "admin", "orders");
     
     // Adiciona o documento com timestamp do servidor para maior precisão
     await addDoc(ordersRef, {
