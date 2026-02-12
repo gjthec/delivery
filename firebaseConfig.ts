@@ -1,9 +1,7 @@
-import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
-import { getAuth } from "firebase/auth";
+import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 
-// Substitua pelo seu objeto de configuração do Firebase Console:
-// Projeto -> Configurações do Projeto -> Seus Aplicativos -> Web
 const firebaseConfig = {
   apiKey: "AIzaSyCID7AGwR-tfNsiJIBd0nPfBGE5adLAbwY",
   authDomain: "train-api-49052.firebaseapp.com",
@@ -14,10 +12,8 @@ const firebaseConfig = {
   measurementId: "G-DT7ZYWWZ8E",
 };
 
-// Inicializa o Firebase
 const app = initializeApp(firebaseConfig);
 
-// Exporta os serviços para serem usados no sistema
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 

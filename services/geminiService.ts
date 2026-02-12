@@ -1,14 +1,15 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
+import { MenuItem } from "../types";
 import { MENU_ITEMS } from "../constants";
 
-export async function askWaiter(query: string) {
+export async function askWaiter(query: string, menuItems: MenuItem[] = MENU_ITEMS) {
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: `Você é o Garçom Virtual do restaurante "Sabor & Arte".
-      Seu cardápio: ${JSON.stringify(MENU_ITEMS)}.
+      Seu cardápio: ${JSON.stringify(menuItems)}.
       
       O cliente perguntou: "${query}".
       
