@@ -19,7 +19,7 @@ function buildPendingOrderNotification(orderId: string): AppNotification {
     message: `Novo pedido pendente: ${orderId}`,
     time: new Date().toISOString(),
     read: false,
-    type: 'order',
+    type: 'created',
     payload: {
       orderId,
       status: 'pending',
@@ -45,7 +45,15 @@ function removeUndefinedDeep<T>(value: T): T {
 }
 
 function normalizeNotificationType(type: unknown): NotificationType {
-  if (type === 'order' || type === 'system' || type === 'ai') {
+  if (
+    type === 'created' ||
+    type === 'preparing' ||
+    type === 'shipping' ||
+    type === 'completed' ||
+    type === 'cancelled' ||
+    type === 'system' ||
+    type === 'ai'
+  ) {
     return type;
   }
 
@@ -176,7 +184,7 @@ export async function getUserNotificationsFromFirebase(): Promise<AdminNotificat
 
     return snapshot.docs
       .map((docSnap) => normalizeAdminNotification(docSnap.id, docSnap.data() as Record<string, unknown>))
-      .filter((notification) => notification.payload?.event !== 'created');
+      .filter((notification) => notification.type !== 'created');
   } catch (error) {
     console.error('[Firebase] Erro ao buscar notificações:', error);
     return [];

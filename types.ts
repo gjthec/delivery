@@ -82,9 +82,9 @@ export interface CheckoutDetails {
 
 export type OrderStatus = 'pending' | 'preparing' | 'shipping' | 'completed' | 'cancelled';
 
-export type NotificationType = 'order' | 'system' | 'ai';
-
 export type OrderNotificationEvent = 'created' | 'preparing' | 'shipping' | 'completed' | 'cancelled';
+
+export type NotificationType = OrderNotificationEvent | 'system' | 'ai';
 
 export type NotificationPayload = {
   orderId?: string;

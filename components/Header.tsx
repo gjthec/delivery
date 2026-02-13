@@ -40,13 +40,21 @@ const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode, notifications, 
 
   const getNotifIcon = (type: AdminNotification['type']) => {
     switch (type) {
-      case 'order':
+      case 'shipping':
         return <Truck size={16} className="text-green-500" />;
+      case 'preparing':
+        return <UtensilsCrossed size={16} className="text-orange-500" />;
+      case 'completed':
+        return <CheckCircle2 size={16} className="text-emerald-500" />;
+      case 'cancelled':
+        return <X size={16} className="text-red-500" />;
+      case 'created':
+        return <Clock size={16} className="text-blue-500" />;
       case 'ai':
         return <Zap size={16} className="text-purple-500" />;
       case 'system':
       default:
-        return <Clock size={16} className="text-blue-500" />;
+        return <Bell size={16} />;
     }
   };
 
