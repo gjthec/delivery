@@ -83,3 +83,13 @@ export interface CheckoutDetails {
   };
   address: Address;
 }
+
+export interface AppNotification {
+  id: string;
+  title: string;
+  message: string;
+  time: string;
+  read: boolean;
+  type: 'order' | 'system' | 'ai';
+  payload?: any;
+}

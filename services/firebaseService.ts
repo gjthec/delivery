@@ -1,7 +1,23 @@
 import { IS_FIREBASE_ON } from '../constants';
 import { db } from '../firebaseConfig';
 import { collection, doc, setDoc, serverTimestamp, getDocs } from 'firebase/firestore';
-import { CartItem, CheckoutDetails, MenuItem } from '../types';
+import { AppNotification, CartItem, CheckoutDetails, MenuItem } from '../types';
+
+
+function buildPendingOrderNotification(orderId: string): AppNotification {
+  return {
+    id: `NOTIF-${orderId}`,
+    title: 'Pedido pendente',
+    message: `Novo pedido pendente: ${orderId}`,
+    time: new Date().toISOString(),
+    read: false,
+    type: 'order',
+    payload: {
+      orderId,
+      status: 'pending'
+    }
+  };
+}
 
 function removeUndefinedDeep<T>(value: T): T {
   if (Array.isArray(value)) {
@@ -102,7 +118,17 @@ export async function saveOrderToFirebase(orderData: FirebaseOrder): Promise<boo
       serverTimestamp: serverTimestamp()
     }));
 
-    console.log("[Firebase] Pedido salvo com sucesso!");
+    // Cria/atualiza notificação de novo pedido pendente em foodai/admin/notifications
+    const notificationsRef = collection(db, 'foodai', 'admin', 'notifications');
+    const notificationData = buildPendingOrderNotification(orderData.id);
+    const notificationRef = doc(notificationsRef, notificationData.id);
+
+    await setDoc(notificationRef, removeUndefinedDeep({
+      ...notificationData,
+      serverTimestamp: serverTimestamp()
+    }));
+
+    console.log("[Firebase] Pedido e notificação salvos com sucesso!");
     return true;
   } catch (error) {
     console.error("[Firebase] Erro ao salvar pedido:", error);
