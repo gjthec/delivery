@@ -10,7 +10,7 @@ import ItemDetailModal from './components/ItemDetailModal';
 import { MENU_ITEMS, CATEGORIES, IS_FIREBASE_ON } from './constants';
 import { MenuItem, FilterType, CartItem, ExtraItem, Address, PaymentType, CardBrand } from './types';
 import { askWaiter } from './services/geminiService';
-import { saveOrderToFirebase, FirebaseOrder } from './services/firebaseService';
+import { saveOrderToFirebase, FirebaseOrder, syncMenuFromFirebase } from './services/firebaseService';
 
 interface AiSuggestion {
   itemId: string;
@@ -40,6 +40,7 @@ const App: React.FC = () => {
   const [isPixModalOpen, setIsPixModalOpen] = useState(false);
   const [currentTotal, setCurrentTotal] = useState(0);
   const [lastOrderDetails, setLastOrderDetails] = useState<any>(null);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>(MENU_ITEMS);
   
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [editingCartIndex, setEditingCartIndex] = useState<number | null>(null);
@@ -84,7 +85,20 @@ const App: React.FC = () => {
     }
   }, [isCartOpen, isPixModalOpen, isDetailModalOpen]);
 
-  const filteredItems = MENU_ITEMS.filter(item => {
+  useEffect(() => {
+    const loadMenu = async () => {
+      if (!IS_FIREBASE_ON) return;
+
+      const firebaseMenu = await syncMenuFromFirebase();
+      if (firebaseMenu && firebaseMenu.length > 0) {
+        setMenuItems(firebaseMenu);
+      }
+    };
+
+    loadMenu();
+  }, []);
+
+  const filteredItems = menuItems.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           item.description.toLowerCase().includes(searchQuery.toLowerCase());
     
@@ -170,29 +184,25 @@ const App: React.FC = () => {
     window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${message}`, '_blank');
   };
 
+  const generateOrderId = () => `PED-${Date.now().toString().slice(-6)}`;
+
   const processOrderToDatabase = async (details: any, items: CartItem[], total: number) => {
     const orderForDb: FirebaseOrder = {
+      id: generateOrderId(),
+      customerName: 'Cliente FoodAI',
       items: items.map(ci => ({
-        id: ci.item.id,
-        name: ci.item.name,
+        menuItem: ci.item,
         quantity: ci.quantity,
-        price: ci.item.price,
-        customizations: {
-          removed: ci.removedIngredients,
-          extras: ci.selectedExtras.map(e => e.name),
-          obs: ci.observations
-        }
+        removedIngredients: ci.removedIngredients,
+        selectedExtras: ci.selectedExtras,
+        observations: ci.observations
       })),
-      customer: {
-        name: "John Doe", // Mock name, ideally comes from auth
-        phone: WHATSAPP_NUMBER,
-        address: details.address
-      },
+      total,
       payment: {
         method: details.payment.type,
-        brand: details.payment.brand,
-        total: total
+        brand: details.payment.brand
       },
+      address: details.address,
       status: 'pending',
       createdAt: new Date().toISOString()
     };
@@ -252,7 +262,7 @@ const App: React.FC = () => {
     setAiSuggestions([]);
     setIsSearchFocused(false);
     
-    const result = await askWaiter(finalQuery);
+    const result = await askWaiter(finalQuery, menuItems);
     if (result?.suggestions) {
         setAiSuggestions(result.suggestions);
         setTimeout(() => {
@@ -420,7 +430,7 @@ const App: React.FC = () => {
                </div>
                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                  {aiSuggestions.map((suggestion, idx) => {
-                   const item = MENU_ITEMS.find(i => i.id === suggestion.itemId);
+                   const item = menuItems.find(i => i.id === suggestion.itemId);
                    if (!item) return null;
                    return (
                      <div key={idx} className="bg-white dark:bg-zinc-900 rounded-[2rem] p-5 shadow-xl border border-zinc-100 dark:border-zinc-800 flex flex-col h-full" onClick={() => openItemDetails(item)}>
