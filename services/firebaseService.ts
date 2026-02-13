@@ -1,6 +1,6 @@
 import { IS_FIREBASE_ON } from '../constants';
 import { db } from '../firebaseConfig';
-import { collection, addDoc, serverTimestamp, getDocs } from 'firebase/firestore';
+import { collection, doc, setDoc, serverTimestamp, getDocs } from 'firebase/firestore';
 import { CartItem, CheckoutDetails, MenuItem } from '../types';
 
 function removeUndefinedDeep<T>(value: T): T {
@@ -93,8 +93,11 @@ export async function saveOrderToFirebase(orderData: FirebaseOrder): Promise<boo
     // Referência para a coleção "foodai/admin/orders"
     const ordersRef = collection(db, "foodai", "admin", "orders");
     
-    // Adiciona o documento com timestamp do servidor para maior precisão
-    await addDoc(ordersRef, removeUndefinedDeep({
+    // Usa o id do pedido como id do documento (ex.: PED-XXXX)
+    const orderRef = doc(ordersRef, orderData.id);
+
+    // Grava o documento com timestamp do servidor para maior precisão
+    await setDoc(orderRef, removeUndefinedDeep({
       ...orderData,
       serverTimestamp: serverTimestamp()
     }));
