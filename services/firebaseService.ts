@@ -6,7 +6,7 @@ import { AppNotification, CartItem, CheckoutDetails, MenuItem } from '../types';
 
 function buildPendingOrderNotification(orderId: string): AppNotification {
   return {
-    id: `NOTIF-${orderId}`,
+    id: orderId,
     title: 'Pedido pendente',
     message: `Novo pedido pendente: ${orderId}`,
     time: new Date().toISOString(),

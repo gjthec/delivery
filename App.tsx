@@ -28,6 +28,13 @@ export interface Notification {
   extraAction?: { label: string, onClick: () => void };
 }
 
+interface CheckoutSession {
+  orderId: string;
+  details: CheckoutDetails;
+  total: number;
+  savedToDatabase: boolean;
+}
+
 const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -39,7 +46,7 @@ const App: React.FC = () => {
   const [isCartJiggling, setIsCartJiggling] = useState(false);
   const [isPixModalOpen, setIsPixModalOpen] = useState(false);
   const [currentTotal, setCurrentTotal] = useState(0);
-  const [lastOrderDetails, setLastOrderDetails] = useState<any>(null);
+  const [checkoutSession, setCheckoutSession] = useState<CheckoutSession | null>(null);
   const [menuItems, setMenuItems] = useState<MenuItem[]>(MENU_ITEMS);
   
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
@@ -186,16 +193,16 @@ const App: React.FC = () => {
 
   const generateOrderId = () => `PED-${Date.now().toString().slice(-6)}`;
 
-  const processOrderToDatabase = async (details: CheckoutDetails, items: CartItem[], total: number) => {
+  const processOrderToDatabase = async (orderId: string, details: CheckoutDetails, items: CartItem[], total: number) => {
     const orderForDb = toFirebaseOrder({
-      id: generateOrderId(),
+      id: orderId,
       customerName: 'Cliente FoodAI',
       details,
       items,
       total
     });
 
-    await saveOrderToFirebase(orderForDb);
+    return saveOrderToFirebase(orderForDb);
   };
 
   const handleCheckout = async (details: CheckoutDetails) => {
@@ -208,14 +215,24 @@ const App: React.FC = () => {
     const deliveryFee = 5.90;
     const finalTotal = subtotal + deliveryFee;
 
+    const orderId = generateOrderId();
+
     setCurrentTotal(finalTotal);
-    setLastOrderDetails(details);
     setIsCartOpen(false);
+
+    let savedToDatabase = false;
 
     // Se Firebase estiver On, salva no banco ANTES de qualquer coisa
     if (IS_FIREBASE_ON) {
-      await processOrderToDatabase(details, cart, finalTotal);
+      savedToDatabase = await processOrderToDatabase(orderId, details, cart, finalTotal);
     }
+
+    setCheckoutSession({
+      orderId,
+      details,
+      total: finalTotal,
+      savedToDatabase
+    });
 
     if (details.payment.type === 'pix') {
       setIsPixModalOpen(true);
@@ -226,12 +243,17 @@ const App: React.FC = () => {
   };
 
   const handlePixConfirmed = async () => {
-    if (lastOrderDetails) {
-      // Se não salvou no checkout (ex: por erro), tenta garantir o salvamento aqui se a flag estiver on
-      if (IS_FIREBASE_ON) {
-        await processOrderToDatabase(lastOrderDetails, cart, currentTotal);
+    if (checkoutSession) {
+      let wasSaved = checkoutSession.savedToDatabase;
+
+      // Se não salvou no checkout (ex: por erro), tenta garantir o salvamento aqui com o MESMO id do pedido
+      if (IS_FIREBASE_ON && !wasSaved) {
+        wasSaved = await processOrderToDatabase(checkoutSession.orderId, checkoutSession.details, cart, checkoutSession.total);
       }
-      sendWhatsAppMessage(lastOrderDetails, cart, currentTotal);
+
+      sendWhatsAppMessage(checkoutSession.details, cart, checkoutSession.total);
+
+      setCheckoutSession((prev) => prev ? { ...prev, savedToDatabase: wasSaved } : prev);
     }
     setCart([]); 
     setIsPixModalOpen(false);
