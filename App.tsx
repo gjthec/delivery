@@ -8,9 +8,9 @@ import PixPaymentModal from './components/PixPaymentModal';
 import CategoryIcon from './components/CategoryIcon';
 import ItemDetailModal from './components/ItemDetailModal';
 import { MENU_ITEMS, CATEGORIES, IS_FIREBASE_ON } from './constants';
-import { MenuItem, FilterType, CartItem, ExtraItem, Address, PaymentType, CardBrand } from './types';
+import { MenuItem, FilterType, CartItem, ExtraItem, CheckoutDetails } from './types';
 import { askWaiter } from './services/geminiService';
-import { saveOrderToFirebase, FirebaseOrder, syncMenuFromFirebase } from './services/firebaseService';
+import { saveOrderToFirebase, syncMenuFromFirebase, toFirebaseOrder } from './services/firebaseService';
 
 interface AiSuggestion {
   itemId: string;
@@ -186,31 +186,19 @@ const App: React.FC = () => {
 
   const generateOrderId = () => `PED-${Date.now().toString().slice(-6)}`;
 
-  const processOrderToDatabase = async (details: any, items: CartItem[], total: number) => {
-    const orderForDb: FirebaseOrder = {
+  const processOrderToDatabase = async (details: CheckoutDetails, items: CartItem[], total: number) => {
+    const orderForDb = toFirebaseOrder({
       id: generateOrderId(),
       customerName: 'Cliente FoodAI',
-      items: items.map(ci => ({
-        menuItem: ci.item,
-        quantity: ci.quantity,
-        removedIngredients: ci.removedIngredients,
-        selectedExtras: ci.selectedExtras,
-        observations: ci.observations
-      })),
-      total,
-      payment: {
-        method: details.payment.type,
-        brand: details.payment.brand
-      },
-      address: details.address,
-      status: 'pending',
-      createdAt: new Date().toISOString()
-    };
+      details,
+      items,
+      total
+    });
 
     await saveOrderToFirebase(orderForDb);
   };
 
-  const handleCheckout = async (details: { payment: { type: PaymentType, brand?: CardBrand, changeFor?: string }, address: Address }) => {
+  const handleCheckout = async (details: CheckoutDetails) => {
     if (cart.length === 0) return;
     
     const subtotal = cart.reduce((acc, ci) => {

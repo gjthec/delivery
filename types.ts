@@ -74,3 +74,12 @@ export interface Address {
   state: string;
   zipCode: string;
 }
+
+export interface CheckoutDetails {
+  payment: {
+    type: PaymentType;
+    brand?: CardBrand;
+    changeFor?: string;
+  };
+  address: Address;
+}

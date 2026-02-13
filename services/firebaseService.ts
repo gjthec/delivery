@@ -1,7 +1,7 @@
 import { IS_FIREBASE_ON } from '../constants';
 import { db } from '../firebaseConfig';
 import { collection, addDoc, serverTimestamp, getDocs } from 'firebase/firestore';
-import { Address, PaymentType, CardBrand, MenuItem } from '../types';
+import { CartItem, CheckoutDetails, MenuItem } from '../types';
 /**
  * Interface para representar a estrutura de um pedido no banco de dados
  */
@@ -17,12 +17,46 @@ export interface FirebaseOrder {
   }[];
   total: number;
   payment: {
-    method: PaymentType;
-    brand?: CardBrand;
+    method: CheckoutDetails['payment']['type'];
+    brand?: CheckoutDetails['payment']['brand'];
+    changeFor?: CheckoutDetails['payment']['changeFor'];
   };
-  address: Address;
+  address: CheckoutDetails['address'];
   status: 'pending' | 'preparing' | 'shipping' | 'completed' | 'cancelled';
   createdAt: string;
+}
+
+
+export function toFirebaseOrder(params: {
+  id: string;
+  customerName: string;
+  details: CheckoutDetails;
+  items: CartItem[];
+  total: number;
+  createdAt?: string;
+}): FirebaseOrder {
+  const { id, customerName, details, items, total, createdAt } = params;
+
+  return {
+    id,
+    customerName,
+    items: items.map((ci) => ({
+      menuItem: ci.item,
+      quantity: ci.quantity,
+      removedIngredients: ci.removedIngredients,
+      selectedExtras: ci.selectedExtras,
+      observations: ci.observations
+    })),
+    total,
+    payment: {
+      method: details.payment.type,
+      brand: details.payment.brand,
+      changeFor: details.payment.changeFor
+    },
+    address: details.address,
+    status: 'pending',
+    createdAt: createdAt ?? new Date().toISOString()
+  };
 }
 
 /**
