@@ -2,6 +2,23 @@ import { IS_FIREBASE_ON } from '../constants';
 import { db } from '../firebaseConfig';
 import { collection, addDoc, serverTimestamp, getDocs } from 'firebase/firestore';
 import { CartItem, CheckoutDetails, MenuItem } from '../types';
+
+function removeUndefinedDeep<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => removeUndefinedDeep(item)) as T;
+  }
+
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, currentValue]) => currentValue !== undefined)
+      .map(([key, currentValue]) => [key, removeUndefinedDeep(currentValue)]);
+
+    return Object.fromEntries(entries) as T;
+  }
+
+  return value;
+}
+
 /**
  * Interface para representar a estrutura de um pedido no banco de dados
  */
@@ -50,10 +67,13 @@ export function toFirebaseOrder(params: {
     total,
     payment: {
       method: details.payment.type,
-      brand: details.payment.brand,
-      changeFor: details.payment.changeFor
+      ...(details.payment.brand ? { brand: details.payment.brand } : {}),
+      ...(details.payment.changeFor ? { changeFor: details.payment.changeFor } : {})
     },
-    address: details.address,
+    address: {
+      ...details.address,
+      ...(details.address.complement ? { complement: details.address.complement } : {})
+    },
     status: 'pending',
     createdAt: createdAt ?? new Date().toISOString()
   };
@@ -74,10 +94,10 @@ export async function saveOrderToFirebase(orderData: FirebaseOrder): Promise<boo
     const ordersRef = collection(db, "foodai", "admin", "orders");
     
     // Adiciona o documento com timestamp do servidor para maior precisão
-    await addDoc(ordersRef, {
+    await addDoc(ordersRef, removeUndefinedDeep({
       ...orderData,
       serverTimestamp: serverTimestamp()
-    });
+    }));
 
     console.log("[Firebase] Pedido salvo com sucesso!");
     return true;
