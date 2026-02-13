@@ -8,28 +8,22 @@ import { CartItem, Address, PaymentType, CardBrand, MenuItem, Category } from '.
  * Interface para representar a estrutura de um pedido no banco de dados
  */
 export interface FirebaseOrder {
+  id: string;
+  customerName: string;
   items: {
-    id: string;
-    name: string;
+    menuItem: MenuItem;
     quantity: number;
-    price: number;
-    customizations: {
-      removed: string[];
-      extras: string[];
-      obs: string;
-    };
+    removedIngredients: string[];
+    selectedExtras: { name: string; price: number }[];
+    observations?: string;
   }[];
-  customer: {
-    name: string;
-    phone: string;
-    address: Address;
-  };
+  total: number;
   payment: {
     method: PaymentType;
     brand?: CardBrand;
-    total: number;
   };
-  status: 'pending' | 'confirmed' | 'preparing' | 'shipping' | 'delivered' | 'cancelled';
+  address: Address;
+  status: 'pending' | 'preparing' | 'shipping' | 'completed' | 'cancelled';
   createdAt: string;
 }
 
