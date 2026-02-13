@@ -1,4 +1,3 @@
-
 export interface ExtraItem {
   name: string;
   price: number;
@@ -17,8 +16,8 @@ export interface MenuItem {
   size: 'P' | 'M' | 'G';
   tags: string[];
   calories?: number;
-  ingredients?: string[]; 
-  extras?: ExtraItem[]; // Adicionais possíveis
+  ingredients?: string[];
+  extras?: ExtraItem[];
 }
 
 export interface CartItem {
@@ -55,13 +54,10 @@ export enum FilterType {
   LargePortion = 'Para matar a fome',
 }
 
-// Fix: Adding missing PaymentType definition
 export type PaymentType = 'credit' | 'debit' | 'pix' | 'cash';
 
-// Fix: Adding missing CardBrand definition
 export type CardBrand = 'mastercard' | 'visa' | 'elo';
 
-// Fix: Adding missing Address interface definition
 export interface Address {
   id: string;
   label: string;
@@ -73,4 +69,45 @@ export interface Address {
   city: string;
   state: string;
   zipCode: string;
+}
+
+export interface CheckoutDetails {
+  payment: {
+    type: PaymentType;
+    brand?: CardBrand;
+    changeFor?: string;
+  };
+  address: Address;
+}
+
+export type OrderStatus = 'pending' | 'preparing' | 'shipping' | 'completed' | 'cancelled';
+
+export type OrderNotificationEvent = 'created' | 'preparing' | 'shipping' | 'completed' | 'cancelled';
+
+export type NotificationType = OrderNotificationEvent | 'system' | 'ai';
+
+export type NotificationPayload = {
+  orderId?: string;
+  status?: OrderStatus;
+  event?: OrderNotificationEvent;
+} & Record<string, any>;
+
+export interface AppNotification {
+  id: string;
+  title: string;
+  message: string;
+  time: string;
+  read: boolean;
+  type: NotificationType;
+  payload?: NotificationPayload;
+}
+
+export interface AdminNotification {
+  id: string;
+  title: string;
+  message: string;
+  time: string;
+  read: boolean;
+  type: NotificationType;
+  payload?: NotificationPayload;
 }

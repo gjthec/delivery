@@ -7,10 +7,10 @@ import CartDrawer from './components/CartDrawer';
 import PixPaymentModal from './components/PixPaymentModal';
 import CategoryIcon from './components/CategoryIcon';
 import ItemDetailModal from './components/ItemDetailModal';
-import { MENU_ITEMS as STATIC_MENU, CATEGORIES as STATIC_CATEGORIES, IS_FIREBASE_ON } from './constants';
-import { MenuItem, FilterType, CartItem, ExtraItem, Address, PaymentType, CardBrand, Category } from './types';
+import { MENU_ITEMS, CATEGORIES, IS_FIREBASE_ON } from './constants';
+import { AdminNotification, MenuItem, FilterType, CartItem, ExtraItem, CheckoutDetails } from './types';
 import { askWaiter } from './services/geminiService';
-import { saveOrderToFirebase, FirebaseOrder, fetchMenuFromFirebase, fetchCategoriesFromFirebase } from './services/firebaseService';
+import { clearUserNotificationsFromFirebase, saveOrderToFirebase, subscribeToUserNotifications, syncMenuFromFirebase, toFirebaseOrder } from './services/firebaseService';
 
 interface AiSuggestion {
   itemId: string;
@@ -18,14 +18,11 @@ interface AiSuggestion {
   reason: string;
 }
 
-export interface Notification {
-  id: string;
-  title: string;
-  message: string;
-  type: 'info' | 'success' | 'warning' | 'shipping';
-  time: string;
-  read: boolean;
-  extraAction?: { label: string, onClick: () => void };
+interface CheckoutSession {
+  orderId: string;
+  details: CheckoutDetails;
+  total: number;
+  savedToDatabase: boolean;
 }
 
 const App: React.FC = () => {
@@ -45,7 +42,9 @@ const App: React.FC = () => {
   const [isCartJiggling, setIsCartJiggling] = useState(false);
   const [isPixModalOpen, setIsPixModalOpen] = useState(false);
   const [currentTotal, setCurrentTotal] = useState(0);
-  const [lastOrderDetails, setLastOrderDetails] = useState<any>(null);
+  const [checkoutSession, setCheckoutSession] = useState<CheckoutSession | null>(null);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>(MENU_ITEMS);
+  
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [editingCartIndex, setEditingCartIndex] = useState<number | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -53,16 +52,7 @@ const App: React.FC = () => {
   const PIX_CODE = "00020126330014br.gov.bcb.pix0111123456789015204000053039865802BR5925FoodAI Restaurantes6009Sao Paulo62070503***6304E2D1";
   const WHATSAPP_NUMBER = "5535998842525"; 
 
-  const [notifications, setNotifications] = useState<Notification[]>([
-    {
-      id: 'notif-initial-1',
-      title: '🏷️ Cupom Ativo!',
-      message: 'Use FOODAI15 e ganhe 15% de desconto no seu pedido!',
-      type: 'warning',
-      time: '2h atrás',
-      read: false
-    }
-  ]);
+  const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   
   const searchInputRef = useRef<HTMLInputElement>(null);
   
@@ -106,6 +96,27 @@ const App: React.FC = () => {
       document.body.style.overflow = 'unset';
     }
   }, [isCartOpen, isPixModalOpen, isDetailModalOpen]);
+
+  useEffect(() => {
+    const loadMenu = async () => {
+      if (!IS_FIREBASE_ON) return;
+
+      const firebaseMenu = await syncMenuFromFirebase();
+      if (firebaseMenu && firebaseMenu.length > 0) {
+        setMenuItems(firebaseMenu);
+      }
+    };
+
+    loadMenu();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToUserNotifications((userNotifications) => {
+      setNotifications(userNotifications);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const filteredItems = menuItems.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -195,35 +206,19 @@ const App: React.FC = () => {
 
   const generateOrderId = () => `PED-${Date.now().toString().slice(-6)}`;
 
-  const processOrderToDatabase = async (details: any, items: CartItem[], total: number) => {
-    const orderForDb: FirebaseOrder = {
-      id: generateOrderId(),
+  const processOrderToDatabase = async (orderId: string, details: CheckoutDetails, items: CartItem[], total: number) => {
+    const orderForDb = toFirebaseOrder({
+      id: orderId,
       customerName: 'Cliente FoodAI',
-      items: items.map(ci => ({
-        menuItem: ci.item,
-        quantity: ci.quantity,
-        removedIngredients: ci.removedIngredients,
-        selectedExtras: ci.selectedExtras,
-        observations: ci.observations
-      })),
-      customer: {
-        name: "John Doe",
-        phone: WHATSAPP_NUMBER,
-        address: details.address
-      },
-      payment: {
-        method: details.payment.type,
-        brand: details.payment.brand
-      },
-      address: details.address,
-      status: 'pending',
-      createdAt: new Date().toISOString()
-    };
+      details,
+      items,
+      total
+    });
 
-    await saveOrderToFirebase(orderForDb);
+    return saveOrderToFirebase(orderForDb);
   };
 
-  const handleCheckout = async (details: { payment: { type: PaymentType, brand?: CardBrand, changeFor?: string }, address: Address }) => {
+  const handleCheckout = async (details: CheckoutDetails) => {
     if (cart.length === 0) return;
     
     const subtotal = cart.reduce((acc, ci) => {
@@ -233,13 +228,24 @@ const App: React.FC = () => {
     const deliveryFee = 5.90;
     const finalTotal = subtotal + deliveryFee;
 
+    const orderId = generateOrderId();
+
     setCurrentTotal(finalTotal);
-    setLastOrderDetails(details);
     setIsCartOpen(false);
 
+    let savedToDatabase = false;
+
+    // Se Firebase estiver On, salva no banco ANTES de qualquer coisa
     if (IS_FIREBASE_ON) {
-      await processOrderToDatabase(details, cart, finalTotal);
+      savedToDatabase = await processOrderToDatabase(orderId, details, cart, finalTotal);
     }
+
+    setCheckoutSession({
+      orderId,
+      details,
+      total: finalTotal,
+      savedToDatabase
+    });
 
     if (details.payment.type === 'pix') {
       setIsPixModalOpen(true);
@@ -250,14 +256,27 @@ const App: React.FC = () => {
   };
 
   const handlePixConfirmed = async () => {
-    if (lastOrderDetails) {
-      if (IS_FIREBASE_ON) {
-        await processOrderToDatabase(lastOrderDetails, cart, currentTotal);
+    if (checkoutSession) {
+      let wasSaved = checkoutSession.savedToDatabase;
+
+      // Se não salvou no checkout (ex: por erro), tenta garantir o salvamento aqui com o MESMO id do pedido
+      if (IS_FIREBASE_ON && !wasSaved) {
+        wasSaved = await processOrderToDatabase(checkoutSession.orderId, checkoutSession.details, cart, checkoutSession.total);
       }
-      sendWhatsAppMessage(lastOrderDetails, cart, currentTotal);
+
+      sendWhatsAppMessage(checkoutSession.details, cart, checkoutSession.total);
+
+      setCheckoutSession((prev) => prev ? { ...prev, savedToDatabase: wasSaved } : prev);
     }
     setCart([]); 
     setIsPixModalOpen(false);
+  };
+
+  const clearNotifications = async () => {
+    const notificationIds = notifications.map((notification) => notification.id);
+
+    setNotifications([]);
+    await clearUserNotificationsFromFirebase(notificationIds);
   };
 
   const markNotificationsAsRead = () => {
@@ -326,6 +345,7 @@ const App: React.FC = () => {
           onToggleDarkMode={() => setDarkMode(!darkMode)}
           notifications={notifications}
           onReadNotifications={markNotificationsAsRead}
+          onClearNotifications={clearNotifications}
         />
       </div>
       

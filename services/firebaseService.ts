@@ -1,8 +1,85 @@
 
 import { IS_FIREBASE_ON } from '../constants';
 import { db } from '../firebaseConfig';
-import { collection, addDoc, getDocs, serverTimestamp } from "firebase/firestore";
-import { CartItem, Address, PaymentType, CardBrand, MenuItem, Category } from '../types';
+import { collection, deleteDoc, doc, getDocs, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
+import {
+  AdminNotification,
+  AppNotification,
+  CartItem,
+  CheckoutDetails,
+  MenuItem,
+  NotificationPayload,
+  NotificationType,
+  OrderStatus
+} from '../types';
+
+function buildPendingOrderNotification(orderId: string): AppNotification {
+  return {
+    id: orderId,
+    title: 'Pedido pendente',
+    message: `Novo pedido pendente: ${orderId}`,
+    time: new Date().toISOString(),
+    read: false,
+    type: 'created',
+    payload: {
+      orderId,
+      status: 'pending',
+      event: 'created'
+    }
+  };
+}
+
+function removeUndefinedDeep<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => removeUndefinedDeep(item)) as T;
+  }
+
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, currentValue]) => currentValue !== undefined)
+      .map(([key, currentValue]) => [key, removeUndefinedDeep(currentValue)]);
+
+    return Object.fromEntries(entries) as T;
+  }
+
+  return value;
+}
+
+function normalizeNotificationType(type: unknown): NotificationType {
+  if (
+    type === 'created' ||
+    type === 'preparing' ||
+    type === 'shipping' ||
+    type === 'completed' ||
+    type === 'cancelled' ||
+    type === 'system' ||
+    type === 'ai'
+  ) {
+    return type;
+  }
+
+  return 'system';
+}
+
+function normalizeNotificationPayload(payload: unknown): NotificationPayload | undefined {
+  if (!payload || typeof payload !== 'object') {
+    return undefined;
+  }
+
+  return payload as NotificationPayload;
+}
+
+function normalizeAdminNotification(id: string, raw: Record<string, unknown>): AdminNotification {
+  return {
+    id,
+    title: typeof raw.title === 'string' ? raw.title : 'Notificação',
+    message: typeof raw.message === 'string' ? raw.message : '',
+    time: typeof raw.time === 'string' ? raw.time : new Date().toISOString(),
+    read: typeof raw.read === 'boolean' ? raw.read : false,
+    type: normalizeNotificationType(raw.type),
+    payload: normalizeNotificationPayload(raw.payload)
+  };
+}
 
 /**
  * Interface para representar a estrutura de um pedido no banco de dados
@@ -19,12 +96,48 @@ export interface FirebaseOrder {
   }[];
   total: number;
   payment: {
-    method: PaymentType;
-    brand?: CardBrand;
+    method: CheckoutDetails['payment']['type'];
+    brand?: CheckoutDetails['payment']['brand'];
+    changeFor?: CheckoutDetails['payment']['changeFor'];
   };
-  address: Address;
-  status: 'pending' | 'preparing' | 'shipping' | 'completed' | 'cancelled';
+  address: CheckoutDetails['address'];
+  status: OrderStatus;
   createdAt: string;
+}
+
+export function toFirebaseOrder(params: {
+  id: string;
+  customerName: string;
+  details: CheckoutDetails;
+  items: CartItem[];
+  total: number;
+  createdAt?: string;
+}): FirebaseOrder {
+  const { id, customerName, details, items, total, createdAt } = params;
+
+  return {
+    id,
+    customerName,
+    items: items.map((ci) => ({
+      menuItem: ci.item,
+      quantity: ci.quantity,
+      removedIngredients: ci.removedIngredients,
+      selectedExtras: ci.selectedExtras,
+      observations: ci.observations
+    })),
+    total,
+    payment: {
+      method: details.payment.type,
+      ...(details.payment.brand ? { brand: details.payment.brand } : {}),
+      ...(details.payment.changeFor ? { changeFor: details.payment.changeFor } : {})
+    },
+    address: {
+      ...details.address,
+      ...(details.address.complement ? { complement: details.address.complement } : {})
+    },
+    status: 'pending',
+    createdAt: createdAt ?? new Date().toISOString()
+  };
 }
 
 /**
@@ -32,19 +145,110 @@ export interface FirebaseOrder {
  */
 export async function saveOrderToFirebase(orderData: FirebaseOrder): Promise<boolean> {
   if (!IS_FIREBASE_ON) {
-    console.log("[Firebase] Integração desativada no momento (IS_FIREBASE_ON = false).");
-    return true; 
+    console.log('[Firebase] Integração desativada. Pedido processado localmente.');
+    return true;
   }
 
   try {
-    const ordersRef = collection(db, "orders");
-    await addDoc(ordersRef, {
+    console.log('[Firebase] Gravando pedido no Firestore...');
+    const ordersRef = collection(db, 'foodai', 'admin', 'orders');
+    const orderRef = doc(ordersRef, orderData.id);
+
+    await setDoc(orderRef, removeUndefinedDeep({
       ...orderData,
       serverTimestamp: serverTimestamp()
-    });
+    }));
+
+    const notificationsRef = collection(db, 'foodai', 'admin', 'notifications');
+    const notificationData = buildPendingOrderNotification(orderData.id);
+    const notificationRef = doc(notificationsRef, notificationData.id);
+
+    await setDoc(notificationRef, removeUndefinedDeep({
+      ...notificationData,
+      serverTimestamp: serverTimestamp()
+    }));
+
+    console.log('[Firebase] Pedido e notificação salvos com sucesso!');
     return true;
   } catch (error) {
-    console.error("[Firebase] Erro ao salvar pedido:", error);
+    console.error('[Firebase] Erro ao salvar pedido:', error);
+    return false;
+  }
+}
+
+
+function mapUserNotifications(snapshotDocs: Array<{ id: string; data: () => Record<string, unknown> }>): AdminNotification[] {
+  return snapshotDocs
+    .map((docSnap) => normalizeAdminNotification(docSnap.id, docSnap.data()))
+    .filter((notification) => notification.type !== 'created')
+    .sort((a, b) => {
+      const timeA = Number.isNaN(Date.parse(a.time)) ? 0 : Date.parse(a.time);
+      const timeB = Number.isNaN(Date.parse(b.time)) ? 0 : Date.parse(b.time);
+      return timeB - timeA;
+    });
+}
+
+export async function getUserNotificationsFromFirebase(): Promise<AdminNotification[]> {
+  if (!IS_FIREBASE_ON) return [];
+
+  try {
+    const notificationsRef = collection(db, 'foodai', 'admin', 'notifications');
+    const snapshot = await getDocs(notificationsRef);
+
+    return mapUserNotifications(
+      snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        data: () => docSnap.data() as Record<string, unknown>
+      }))
+    );
+  } catch (error) {
+    console.error('[Firebase] Erro ao buscar notificações:', error);
+    return [];
+  }
+}
+
+
+
+export function subscribeToUserNotifications(onChange: (notifications: AdminNotification[]) => void): () => void {
+  if (!IS_FIREBASE_ON) {
+    onChange([]);
+    return () => {};
+  }
+
+  const notificationsRef = collection(db, 'foodai', 'admin', 'notifications');
+
+  return onSnapshot(
+    notificationsRef,
+    (snapshot) => {
+      const notifications = mapUserNotifications(
+        snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          data: () => docSnap.data() as Record<string, unknown>
+        }))
+      );
+
+      onChange(notifications);
+    },
+    (error) => {
+      console.error('[Firebase] Erro no listener de notificações:', error);
+      onChange([]);
+    }
+  );
+}
+
+export async function clearUserNotificationsFromFirebase(notificationIds: string[]): Promise<boolean> {
+  if (!IS_FIREBASE_ON || notificationIds.length === 0) return true;
+
+  try {
+    const notificationsRef = collection(db, 'foodai', 'admin', 'notifications');
+
+    await Promise.all(
+      notificationIds.map((notificationId) => deleteDoc(doc(notificationsRef, notificationId)))
+    );
+
+    return true;
+  } catch (error) {
+    console.error('[Firebase] Erro ao limpar notificações:', error);
     return false;
   }
 }

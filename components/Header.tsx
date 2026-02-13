@@ -1,16 +1,17 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { MapPin, ChevronDown, Moon, Sun, Menu, Bell, Zap, Info, Settings, LogOut, X, CheckCircle2, Clock, Truck, UtensilsCrossed, Copy, User, ShoppingBag, MapPinned, Ticket } from 'lucide-react';
-import { Notification } from '../App';
+import { MapPin, ChevronDown, Moon, Sun, Menu, Bell, Zap, Info, Settings, LogOut, X, CheckCircle2, Clock, Truck, UtensilsCrossed, User, ShoppingBag, MapPinned, Ticket } from 'lucide-react';
+import { AdminNotification } from '../types';
 
 interface Props {
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
-  notifications: Notification[];
+  notifications: AdminNotification[];
   onReadNotifications: () => void;
+  onClearNotifications: () => void;
 }
 
-const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode, notifications, onReadNotifications }) => {
+const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode, notifications, onReadNotifications, onClearNotifications }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -38,13 +39,23 @@ const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode, notifications, 
     setIsNotifOpen(false);
   };
 
-  const getNotifIcon = (type: Notification['type']) => {
+  const getNotifIcon = (type: AdminNotification['type']) => {
     switch (type) {
-      case 'info': return <Clock size={16} className="text-blue-500" />;
-      case 'success': return <UtensilsCrossed size={16} className="text-purple-500" />;
-      case 'warning': return <Zap size={16} className="text-orange-500" />;
-      case 'shipping': return <Truck size={16} className="text-green-500" />;
-      default: return <Bell size={16} />;
+      case 'shipping':
+        return <Truck size={16} className="text-green-500" />;
+      case 'preparing':
+        return <UtensilsCrossed size={16} className="text-orange-500" />;
+      case 'completed':
+        return <CheckCircle2 size={16} className="text-emerald-500" />;
+      case 'cancelled':
+        return <X size={16} className="text-red-500" />;
+      case 'created':
+        return <Clock size={16} className="text-blue-500" />;
+      case 'ai':
+        return <Zap size={16} className="text-purple-500" />;
+      case 'system':
+      default:
+        return <Bell size={16} />;
     }
   };
 
@@ -77,7 +88,15 @@ const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode, notifications, 
 
             {isNotifOpen && (
               <div className="absolute top-16 right-0 w-80 max-h-[80vh] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl rounded-[2.2rem] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200 origin-top-right z-[150]">
-                 <div className="p-5 border-b border-zinc-50 dark:border-zinc-800/50 bg-zinc-50 dark:bg-zinc-800/20"><h4 className="font-black text-xs uppercase tracking-widest text-zinc-500">Notificações</h4></div>
+                 <div className="p-5 border-b border-zinc-50 dark:border-zinc-800/50 bg-zinc-50 dark:bg-zinc-800/20 flex items-center justify-between gap-3">
+                   <h4 className="font-black text-xs uppercase tracking-widest text-zinc-500">Notificações</h4>
+                   <button
+                     onClick={onClearNotifications}
+                     className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-orange-500 transition-colors"
+                   >
+                     Limpar
+                   </button>
+                 </div>
                  <div className="overflow-y-auto hide-scrollbar p-3 space-y-2">
                     {notifications.length === 0 ? (
                       <div className="py-12 text-center text-xs font-bold text-zinc-400 italic">Nada por aqui.</div>
@@ -92,16 +111,6 @@ const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode, notifications, 
                                    <span className="text-[9px] font-bold text-zinc-400 uppercase">{notif.time}</span>
                                 </div>
                                 <p className="text-[11px] font-medium text-zinc-500 leading-relaxed mb-3">{notif.message}</p>
-                                
-                                {notif.extraAction && (
-                                  <button 
-                                    onClick={notif.extraAction.onClick}
-                                    className="w-full py-2 bg-orange-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-orange-600 active:scale-95 transition-all"
-                                  >
-                                    <Copy size={12} />
-                                    {notif.extraAction.label}
-                                  </button>
-                                )}
                              </div>
                           </div>
                         </div>

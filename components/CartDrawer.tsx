@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { X, Trash2, ShoppingBag, ArrowRight, Minus, Plus, CreditCard, MapPin, Wallet, Apple, ChevronRight, CheckCircle2, ShieldCheck, Zap, Ticket, Tag, Percent, XCircle, MapPinned, Home, Navigation2, Briefcase, PlusCircle, Pencil, Trash, QrCode, Banknote, Landmark, Coins, Clock, ChevronUp } from 'lucide-react';
-import { MenuItem, CartItem, Address, PaymentType, CardBrand } from '../types';
+import { CartItem, Address, PaymentType, CardBrand, CheckoutDetails } from '../types';
 
 interface Props {
   isOpen: boolean;
@@ -10,7 +10,7 @@ interface Props {
   onRemove: (index: number) => void;
   onEdit: (index: number) => void;
   onClear: () => void;
-  onCheckout: (details: { payment: { type: PaymentType, brand?: CardBrand, changeFor?: string }, address: Address }) => void;
+  onCheckout: (details: CheckoutDetails) => void;
 }
 
 const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onEdit, onClear, onCheckout }) => {
