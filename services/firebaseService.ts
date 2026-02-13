@@ -1,6 +1,6 @@
 import { IS_FIREBASE_ON } from '../constants';
 import { db } from '../firebaseConfig';
-import { collection, doc, setDoc, serverTimestamp, getDocs } from 'firebase/firestore';
+import { collection, deleteDoc, doc, setDoc, serverTimestamp, getDocs } from 'firebase/firestore';
 import {
   AdminNotification,
   AppNotification,
@@ -184,10 +184,33 @@ export async function getUserNotificationsFromFirebase(): Promise<AdminNotificat
 
     return snapshot.docs
       .map((docSnap) => normalizeAdminNotification(docSnap.id, docSnap.data() as Record<string, unknown>))
-      .filter((notification) => notification.type !== 'created');
+      .filter((notification) => notification.type !== 'created')
+      .sort((a, b) => {
+        const timeA = Number.isNaN(Date.parse(a.time)) ? 0 : Date.parse(a.time);
+        const timeB = Number.isNaN(Date.parse(b.time)) ? 0 : Date.parse(b.time);
+        return timeB - timeA;
+      });
   } catch (error) {
     console.error('[Firebase] Erro ao buscar notificações:', error);
     return [];
+  }
+}
+
+
+export async function clearUserNotificationsFromFirebase(notificationIds: string[]): Promise<boolean> {
+  if (!IS_FIREBASE_ON || notificationIds.length === 0) return true;
+
+  try {
+    const notificationsRef = collection(db, 'foodai', 'admin', 'notifications');
+
+    await Promise.all(
+      notificationIds.map((notificationId) => deleteDoc(doc(notificationsRef, notificationId)))
+    );
+
+    return true;
+  } catch (error) {
+    console.error('[Firebase] Erro ao limpar notificações:', error);
+    return false;
   }
 }
 

@@ -8,9 +8,10 @@ interface Props {
   onToggleDarkMode: () => void;
   notifications: AdminNotification[];
   onReadNotifications: () => void;
+  onClearNotifications: () => void;
 }
 
-const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode, notifications, onReadNotifications }) => {
+const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode, notifications, onReadNotifications, onClearNotifications }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -87,7 +88,15 @@ const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode, notifications, 
 
             {isNotifOpen && (
               <div className="absolute top-16 right-0 w-80 max-h-[80vh] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl rounded-[2.2rem] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200 origin-top-right z-[150]">
-                 <div className="p-5 border-b border-zinc-50 dark:border-zinc-800/50 bg-zinc-50 dark:bg-zinc-800/20"><h4 className="font-black text-xs uppercase tracking-widest text-zinc-500">Notificações</h4></div>
+                 <div className="p-5 border-b border-zinc-50 dark:border-zinc-800/50 bg-zinc-50 dark:bg-zinc-800/20 flex items-center justify-between gap-3">
+                   <h4 className="font-black text-xs uppercase tracking-widest text-zinc-500">Notificações</h4>
+                   <button
+                     onClick={onClearNotifications}
+                     className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-orange-500 transition-colors"
+                   >
+                     Limpar
+                   </button>
+                 </div>
                  <div className="overflow-y-auto hide-scrollbar p-3 space-y-2">
                     {notifications.length === 0 ? (
                       <div className="py-12 text-center text-xs font-bold text-zinc-400 italic">Nada por aqui.</div>

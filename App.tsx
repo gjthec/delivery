@@ -10,7 +10,7 @@ import ItemDetailModal from './components/ItemDetailModal';
 import { MENU_ITEMS, CATEGORIES, IS_FIREBASE_ON } from './constants';
 import { AdminNotification, MenuItem, FilterType, CartItem, ExtraItem, CheckoutDetails } from './types';
 import { askWaiter } from './services/geminiService';
-import { getUserNotificationsFromFirebase, saveOrderToFirebase, syncMenuFromFirebase, toFirebaseOrder } from './services/firebaseService';
+import { clearUserNotificationsFromFirebase, getUserNotificationsFromFirebase, saveOrderToFirebase, syncMenuFromFirebase, toFirebaseOrder } from './services/firebaseService';
 
 interface AiSuggestion {
   itemId: string;
@@ -252,6 +252,13 @@ const App: React.FC = () => {
     setIsPixModalOpen(false);
   };
 
+  const clearNotifications = async () => {
+    const notificationIds = notifications.map((notification) => notification.id);
+
+    setNotifications([]);
+    await clearUserNotificationsFromFirebase(notificationIds);
+  };
+
   const markNotificationsAsRead = () => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
   };
@@ -310,6 +317,7 @@ const App: React.FC = () => {
           onToggleDarkMode={() => setDarkMode(!darkMode)}
           notifications={notifications}
           onReadNotifications={markNotificationsAsRead}
+          onClearNotifications={clearNotifications}
         />
       </div>
       
