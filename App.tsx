@@ -10,11 +10,7 @@ import ItemDetailModal from './components/ItemDetailModal';
 import { MENU_ITEMS as STATIC_MENU, CATEGORIES as STATIC_CATEGORIES, IS_FIREBASE_ON } from './constants';
 import { MenuItem, FilterType, CartItem, ExtraItem, Address, PaymentType, CardBrand, Category } from './types';
 import { askWaiter } from './services/geminiService';
-<<<<<<< HEAD
 import { saveOrderToFirebase, FirebaseOrder, fetchMenuFromFirebase, fetchCategoriesFromFirebase } from './services/firebaseService';
-=======
-import { saveOrderToFirebase, FirebaseOrder, syncMenuFromFirebase } from './services/firebaseService';
->>>>>>> e59bfd7026584ea2be4ab432bbf890f1b70b0b2f
 
 interface AiSuggestion {
   itemId: string;
@@ -50,11 +46,6 @@ const App: React.FC = () => {
   const [isPixModalOpen, setIsPixModalOpen] = useState(false);
   const [currentTotal, setCurrentTotal] = useState(0);
   const [lastOrderDetails, setLastOrderDetails] = useState<any>(null);
-<<<<<<< HEAD
-=======
-  const [menuItems, setMenuItems] = useState<MenuItem[]>(MENU_ITEMS);
-  
->>>>>>> e59bfd7026584ea2be4ab432bbf890f1b70b0b2f
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [editingCartIndex, setEditingCartIndex] = useState<number | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -116,22 +107,6 @@ const App: React.FC = () => {
     }
   }, [isCartOpen, isPixModalOpen, isDetailModalOpen]);
 
-<<<<<<< HEAD
-=======
-  useEffect(() => {
-    const loadMenu = async () => {
-      if (!IS_FIREBASE_ON) return;
-
-      const firebaseMenu = await syncMenuFromFirebase();
-      if (firebaseMenu && firebaseMenu.length > 0) {
-        setMenuItems(firebaseMenu);
-      }
-    };
-
-    loadMenu();
-  }, []);
-
->>>>>>> e59bfd7026584ea2be4ab432bbf890f1b70b0b2f
   const filteredItems = menuItems.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           item.description.toLowerCase().includes(searchQuery.toLowerCase());
@@ -231,15 +206,11 @@ const App: React.FC = () => {
         selectedExtras: ci.selectedExtras,
         observations: ci.observations
       })),
-<<<<<<< HEAD
       customer: {
         name: "John Doe",
         phone: WHATSAPP_NUMBER,
         address: details.address
       },
-=======
-      total,
->>>>>>> e59bfd7026584ea2be4ab432bbf890f1b70b0b2f
       payment: {
         method: details.payment.type,
         brand: details.payment.brand
@@ -302,10 +273,7 @@ const App: React.FC = () => {
     setAiSuggestions([]);
     setIsSearchFocused(false);
     
-<<<<<<< HEAD
     // Passamos o menuItems (que pode ser do Firebase) para a IA
-=======
->>>>>>> e59bfd7026584ea2be4ab432bbf890f1b70b0b2f
     const result = await askWaiter(finalQuery, menuItems);
     if (result?.suggestions) {
         setAiSuggestions(result.suggestions);
