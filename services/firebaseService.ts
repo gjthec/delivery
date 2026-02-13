@@ -1,8 +1,16 @@
 import { IS_FIREBASE_ON } from '../constants';
 import { db } from '../firebaseConfig';
 import { collection, doc, setDoc, serverTimestamp, getDocs } from 'firebase/firestore';
-import { AppNotification, CartItem, CheckoutDetails, MenuItem } from '../types';
-
+import {
+  AdminNotification,
+  AppNotification,
+  CartItem,
+  CheckoutDetails,
+  MenuItem,
+  NotificationPayload,
+  NotificationType,
+  OrderStatus
+} from '../types';
 
 function buildPendingOrderNotification(orderId: string): AppNotification {
   return {
@@ -14,7 +22,8 @@ function buildPendingOrderNotification(orderId: string): AppNotification {
     type: 'order',
     payload: {
       orderId,
-      status: 'pending'
+      status: 'pending',
+      event: 'created'
     }
   };
 }
@@ -33,6 +42,34 @@ function removeUndefinedDeep<T>(value: T): T {
   }
 
   return value;
+}
+
+function normalizeNotificationType(type: unknown): NotificationType {
+  if (type === 'order' || type === 'system' || type === 'ai') {
+    return type;
+  }
+
+  return 'system';
+}
+
+function normalizeNotificationPayload(payload: unknown): NotificationPayload | undefined {
+  if (!payload || typeof payload !== 'object') {
+    return undefined;
+  }
+
+  return payload as NotificationPayload;
+}
+
+function normalizeAdminNotification(id: string, raw: Record<string, unknown>): AdminNotification {
+  return {
+    id,
+    title: typeof raw.title === 'string' ? raw.title : 'Notificação',
+    message: typeof raw.message === 'string' ? raw.message : '',
+    time: typeof raw.time === 'string' ? raw.time : new Date().toISOString(),
+    read: typeof raw.read === 'boolean' ? raw.read : false,
+    type: normalizeNotificationType(raw.type),
+    payload: normalizeNotificationPayload(raw.payload)
+  };
 }
 
 /**
@@ -55,10 +92,9 @@ export interface FirebaseOrder {
     changeFor?: CheckoutDetails['payment']['changeFor'];
   };
   address: CheckoutDetails['address'];
-  status: 'pending' | 'preparing' | 'shipping' | 'completed' | 'cancelled';
+  status: OrderStatus;
   createdAt: string;
 }
-
 
 export function toFirebaseOrder(params: {
   id: string;
@@ -100,25 +136,20 @@ export function toFirebaseOrder(params: {
  */
 export async function saveOrderToFirebase(orderData: FirebaseOrder): Promise<boolean> {
   if (!IS_FIREBASE_ON) {
-    console.log("[Firebase] Integração desativada. Pedido processado localmente.");
-    return true; 
+    console.log('[Firebase] Integração desativada. Pedido processado localmente.');
+    return true;
   }
 
   try {
-    console.log("[Firebase] Gravando pedido no Firestore...");
-    // Referência para a coleção "foodai/admin/orders"
-    const ordersRef = collection(db, "foodai", "admin", "orders");
-    
-    // Usa o id do pedido como id do documento (ex.: PED-XXXX)
+    console.log('[Firebase] Gravando pedido no Firestore...');
+    const ordersRef = collection(db, 'foodai', 'admin', 'orders');
     const orderRef = doc(ordersRef, orderData.id);
 
-    // Grava o documento com timestamp do servidor para maior precisão
     await setDoc(orderRef, removeUndefinedDeep({
       ...orderData,
       serverTimestamp: serverTimestamp()
     }));
 
-    // Cria/atualiza notificação de novo pedido pendente em foodai/admin/notifications
     const notificationsRef = collection(db, 'foodai', 'admin', 'notifications');
     const notificationData = buildPendingOrderNotification(orderData.id);
     const notificationRef = doc(notificationsRef, notificationData.id);
@@ -128,11 +159,27 @@ export async function saveOrderToFirebase(orderData: FirebaseOrder): Promise<boo
       serverTimestamp: serverTimestamp()
     }));
 
-    console.log("[Firebase] Pedido e notificação salvos com sucesso!");
+    console.log('[Firebase] Pedido e notificação salvos com sucesso!');
     return true;
   } catch (error) {
-    console.error("[Firebase] Erro ao salvar pedido:", error);
+    console.error('[Firebase] Erro ao salvar pedido:', error);
     return false;
+  }
+}
+
+export async function getUserNotificationsFromFirebase(): Promise<AdminNotification[]> {
+  if (!IS_FIREBASE_ON) return [];
+
+  try {
+    const notificationsRef = collection(db, 'foodai', 'admin', 'notifications');
+    const snapshot = await getDocs(notificationsRef);
+
+    return snapshot.docs
+      .map((docSnap) => normalizeAdminNotification(docSnap.id, docSnap.data() as Record<string, unknown>))
+      .filter((notification) => notification.payload?.event !== 'created');
+  } catch (error) {
+    console.error('[Firebase] Erro ao buscar notificações:', error);
+    return [];
   }
 }
 

@@ -8,24 +8,14 @@ import PixPaymentModal from './components/PixPaymentModal';
 import CategoryIcon from './components/CategoryIcon';
 import ItemDetailModal from './components/ItemDetailModal';
 import { MENU_ITEMS, CATEGORIES, IS_FIREBASE_ON } from './constants';
-import { MenuItem, FilterType, CartItem, ExtraItem, CheckoutDetails } from './types';
+import { AdminNotification, MenuItem, FilterType, CartItem, ExtraItem, CheckoutDetails } from './types';
 import { askWaiter } from './services/geminiService';
-import { saveOrderToFirebase, syncMenuFromFirebase, toFirebaseOrder } from './services/firebaseService';
+import { getUserNotificationsFromFirebase, saveOrderToFirebase, syncMenuFromFirebase, toFirebaseOrder } from './services/firebaseService';
 
 interface AiSuggestion {
   itemId: string;
   quantity: number;
   reason: string;
-}
-
-export interface Notification {
-  id: string;
-  title: string;
-  message: string;
-  type: 'info' | 'success' | 'warning' | 'shipping';
-  time: string;
-  read: boolean;
-  extraAction?: { label: string, onClick: () => void };
 }
 
 interface CheckoutSession {
@@ -56,16 +46,7 @@ const App: React.FC = () => {
   const PIX_CODE = "00020126330014br.gov.bcb.pix0111123456789015204000053039865802BR5925FoodAI Restaurantes6009Sao Paulo62070503***6304E2D1";
   const WHATSAPP_NUMBER = "5535998842525"; 
 
-  const [notifications, setNotifications] = useState<Notification[]>([
-    {
-      id: 'notif-initial-1',
-      title: '🏷️ Cupom Ativo!',
-      message: 'Use FOODAI15 e ganhe 15% de desconto no seu pedido!',
-      type: 'warning',
-      time: '2h atrás',
-      read: false
-    }
-  ]);
+  const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   
   const searchInputRef = useRef<HTMLInputElement>(null);
   
@@ -103,6 +84,18 @@ const App: React.FC = () => {
     };
 
     loadMenu();
+  }, []);
+
+  useEffect(() => {
+    const loadNotifications = async () => {
+      const userNotifications = await getUserNotificationsFromFirebase();
+      setNotifications(userNotifications);
+    };
+
+    loadNotifications();
+
+    const interval = window.setInterval(loadNotifications, 15000);
+    return () => window.clearInterval(interval);
   }, []);
 
   const filteredItems = menuItems.filter(item => {

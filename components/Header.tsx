@@ -1,12 +1,12 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { MapPin, ChevronDown, Moon, Sun, Menu, Bell, Zap, Info, Settings, LogOut, X, CheckCircle2, Clock, Truck, UtensilsCrossed, Copy, User, ShoppingBag, MapPinned, Ticket } from 'lucide-react';
-import { Notification } from '../App';
+import { MapPin, ChevronDown, Moon, Sun, Menu, Bell, Zap, Info, Settings, LogOut, X, CheckCircle2, Clock, Truck, UtensilsCrossed, User, ShoppingBag, MapPinned, Ticket } from 'lucide-react';
+import { AdminNotification } from '../types';
 
 interface Props {
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
-  notifications: Notification[];
+  notifications: AdminNotification[];
   onReadNotifications: () => void;
 }
 
@@ -38,13 +38,15 @@ const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode, notifications, 
     setIsNotifOpen(false);
   };
 
-  const getNotifIcon = (type: Notification['type']) => {
+  const getNotifIcon = (type: AdminNotification['type']) => {
     switch (type) {
-      case 'info': return <Clock size={16} className="text-blue-500" />;
-      case 'success': return <UtensilsCrossed size={16} className="text-purple-500" />;
-      case 'warning': return <Zap size={16} className="text-orange-500" />;
-      case 'shipping': return <Truck size={16} className="text-green-500" />;
-      default: return <Bell size={16} />;
+      case 'order':
+        return <Truck size={16} className="text-green-500" />;
+      case 'ai':
+        return <Zap size={16} className="text-purple-500" />;
+      case 'system':
+      default:
+        return <Clock size={16} className="text-blue-500" />;
     }
   };
 
@@ -92,16 +94,6 @@ const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode, notifications, 
                                    <span className="text-[9px] font-bold text-zinc-400 uppercase">{notif.time}</span>
                                 </div>
                                 <p className="text-[11px] font-medium text-zinc-500 leading-relaxed mb-3">{notif.message}</p>
-                                
-                                {notif.extraAction && (
-                                  <button 
-                                    onClick={notif.extraAction.onClick}
-                                    className="w-full py-2 bg-orange-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-orange-600 active:scale-95 transition-all"
-                                  >
-                                    <Copy size={12} />
-                                    {notif.extraAction.label}
-                                  </button>
-                                )}
                              </div>
                           </div>
                         </div>
