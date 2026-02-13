@@ -10,15 +10,10 @@
   },
   "dependencies": {
     "@google/genai": "^1.40.0",
-<<<<<<< HEAD
     "firebase": "^12.9.0",
     "lucide-react": "^0.563.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
-=======
-    "lucide-react": "^0.563.0",
-    "firebase": "^11.0.2"
->>>>>>> e59bfd7026584ea2be4ab432bbf890f1b70b0b2f
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

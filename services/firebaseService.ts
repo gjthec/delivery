@@ -7,6 +7,7 @@ import {
   AppNotification,
   CartItem,
   CheckoutDetails,
+  Category,
   MenuItem,
   NotificationPayload,
   NotificationType,
@@ -258,16 +259,29 @@ export async function clearUserNotificationsFromFirebase(notificationIds: string
  */
 export async function fetchMenuFromFirebase(): Promise<MenuItem[] | null> {
   if (!IS_FIREBASE_ON) return null;
-  try {
-    const querySnapshot = await getDocs(collection(db, "menu"));
-    return querySnapshot.docs.map(doc => ({
-      ...doc.data(),
-      id: doc.id // Usa o ID do documento do Firestore
-    } as MenuItem));
-  } catch (error) {
-    console.error("[Firebase] Erro ao buscar menu:", error);
-    return null;
+
+  const menuPaths: string[][] = [
+    ['menu'],
+    ['foodai', 'admin', 'menu']
+  ];
+
+  for (const pathParts of menuPaths) {
+    try {
+      const querySnapshot = await getDocs(collection(db, ...pathParts));
+      if (!querySnapshot.empty) {
+        console.log(`[Firebase] Cardápio carregado de ${pathParts.join('/')}`);
+        return querySnapshot.docs.map((docSnap) => ({
+          ...docSnap.data(),
+          id: docSnap.id
+        } as MenuItem));
+      }
+    } catch (error) {
+      console.error(`[Firebase] Erro ao buscar menu em ${pathParts.join('/')}:`, error);
+    }
   }
+
+  console.warn('[Firebase] Nenhum item encontrado no cardápio (paths testados: menu, foodai/admin/menu).');
+  return [];
 }
 
 /**
@@ -275,14 +289,27 @@ export async function fetchMenuFromFirebase(): Promise<MenuItem[] | null> {
  */
 export async function fetchCategoriesFromFirebase(): Promise<Category[] | null> {
   if (!IS_FIREBASE_ON) return null;
-  try {
-    const querySnapshot = await getDocs(collection(db, "categories"));
-    return querySnapshot.docs.map(doc => ({
-      ...doc.data(),
-      id: doc.id
-    } as Category));
-  } catch (error) {
-    console.error("[Firebase] Erro ao buscar categorias:", error);
-    return null;
+
+  const categoryPaths: string[][] = [
+    ['categories'],
+    ['foodai', 'admin', 'categories']
+  ];
+
+  for (const pathParts of categoryPaths) {
+    try {
+      const querySnapshot = await getDocs(collection(db, ...pathParts));
+      if (!querySnapshot.empty) {
+        console.log(`[Firebase] Categorias carregadas de ${pathParts.join('/')}`);
+        return querySnapshot.docs.map((docSnap) => ({
+          ...docSnap.data(),
+          id: docSnap.id
+        } as Category));
+      }
+    } catch (error) {
+      console.error(`[Firebase] Erro ao buscar categorias em ${pathParts.join('/')}:`, error);
+    }
   }
+
+  console.warn('[Firebase] Nenhuma categoria encontrada (paths testados: categories, foodai/admin/categories).');
+  return [];
 }

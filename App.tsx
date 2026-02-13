@@ -8,9 +8,9 @@ import PixPaymentModal from './components/PixPaymentModal';
 import CategoryIcon from './components/CategoryIcon';
 import ItemDetailModal from './components/ItemDetailModal';
 import { MENU_ITEMS, CATEGORIES, IS_FIREBASE_ON } from './constants';
-import { AdminNotification, MenuItem, FilterType, CartItem, ExtraItem, CheckoutDetails } from './types';
+import { AdminNotification, MenuItem, FilterType, CartItem, ExtraItem, CheckoutDetails, Category } from './types';
 import { askWaiter } from './services/geminiService';
-import { clearUserNotificationsFromFirebase, saveOrderToFirebase, subscribeToUserNotifications, syncMenuFromFirebase, toFirebaseOrder } from './services/firebaseService';
+import { clearUserNotificationsFromFirebase, fetchCategoriesFromFirebase, fetchMenuFromFirebase, saveOrderToFirebase, subscribeToUserNotifications, toFirebaseOrder } from './services/firebaseService';
 
 interface AiSuggestion {
   itemId: string;
@@ -27,8 +27,8 @@ interface CheckoutSession {
 
 const App: React.FC = () => {
   // Dados dinâmicos (Menu e Categorias)
-  const [menuItems, setMenuItems] = useState<MenuItem[]>(STATIC_MENU);
-  const [categories, setCategories] = useState<Category[]>(STATIC_CATEGORIES);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>(MENU_ITEMS);
+  const [categories, setCategories] = useState<Category[]>(CATEGORIES);
   const [isLoadingData, setIsLoadingData] = useState(false);
 
   // Estados de UI
@@ -43,7 +43,6 @@ const App: React.FC = () => {
   const [isPixModalOpen, setIsPixModalOpen] = useState(false);
   const [currentTotal, setCurrentTotal] = useState(0);
   const [checkoutSession, setCheckoutSession] = useState<CheckoutSession | null>(null);
-  const [menuItems, setMenuItems] = useState<MenuItem[]>(MENU_ITEMS);
   
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [editingCartIndex, setEditingCartIndex] = useState<number | null>(null);
@@ -97,18 +96,6 @@ const App: React.FC = () => {
     }
   }, [isCartOpen, isPixModalOpen, isDetailModalOpen]);
 
-  useEffect(() => {
-    const loadMenu = async () => {
-      if (!IS_FIREBASE_ON) return;
-
-      const firebaseMenu = await syncMenuFromFirebase();
-      if (firebaseMenu && firebaseMenu.length > 0) {
-        setMenuItems(firebaseMenu);
-      }
-    };
-
-    loadMenu();
-  }, []);
 
   useEffect(() => {
     const unsubscribe = subscribeToUserNotifications((userNotifications) => {
