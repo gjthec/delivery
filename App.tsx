@@ -10,7 +10,7 @@ import ItemDetailModal from './components/ItemDetailModal';
 import { MENU_ITEMS, CATEGORIES, IS_FIREBASE_ON } from './constants';
 import { AdminNotification, MenuItem, FilterType, CartItem, ExtraItem, CheckoutDetails } from './types';
 import { askWaiter } from './services/geminiService';
-import { clearUserNotificationsFromFirebase, getUserNotificationsFromFirebase, saveOrderToFirebase, syncMenuFromFirebase, toFirebaseOrder } from './services/firebaseService';
+import { clearUserNotificationsFromFirebase, saveOrderToFirebase, subscribeToUserNotifications, syncMenuFromFirebase, toFirebaseOrder } from './services/firebaseService';
 
 interface AiSuggestion {
   itemId: string;
@@ -87,15 +87,11 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const loadNotifications = async () => {
-      const userNotifications = await getUserNotificationsFromFirebase();
+    const unsubscribe = subscribeToUserNotifications((userNotifications) => {
       setNotifications(userNotifications);
-    };
+    });
 
-    loadNotifications();
-
-    const interval = window.setInterval(loadNotifications, 15000);
-    return () => window.clearInterval(interval);
+    return () => unsubscribe();
   }, []);
 
   const filteredItems = menuItems.filter(item => {

@@ -1,6 +1,6 @@
 import { IS_FIREBASE_ON } from '../constants';
 import { db } from '../firebaseConfig';
-import { collection, deleteDoc, doc, setDoc, serverTimestamp, getDocs } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import {
   AdminNotification,
   AppNotification,
@@ -175,6 +175,18 @@ export async function saveOrderToFirebase(orderData: FirebaseOrder): Promise<boo
   }
 }
 
+
+function mapUserNotifications(snapshotDocs: Array<{ id: string; data: () => Record<string, unknown> }>): AdminNotification[] {
+  return snapshotDocs
+    .map((docSnap) => normalizeAdminNotification(docSnap.id, docSnap.data()))
+    .filter((notification) => notification.type !== 'created')
+    .sort((a, b) => {
+      const timeA = Number.isNaN(Date.parse(a.time)) ? 0 : Date.parse(a.time);
+      const timeB = Number.isNaN(Date.parse(b.time)) ? 0 : Date.parse(b.time);
+      return timeB - timeA;
+    });
+}
+
 export async function getUserNotificationsFromFirebase(): Promise<AdminNotification[]> {
   if (!IS_FIREBASE_ON) return [];
 
@@ -182,20 +194,46 @@ export async function getUserNotificationsFromFirebase(): Promise<AdminNotificat
     const notificationsRef = collection(db, 'foodai', 'admin', 'notifications');
     const snapshot = await getDocs(notificationsRef);
 
-    return snapshot.docs
-      .map((docSnap) => normalizeAdminNotification(docSnap.id, docSnap.data() as Record<string, unknown>))
-      .filter((notification) => notification.type !== 'created')
-      .sort((a, b) => {
-        const timeA = Number.isNaN(Date.parse(a.time)) ? 0 : Date.parse(a.time);
-        const timeB = Number.isNaN(Date.parse(b.time)) ? 0 : Date.parse(b.time);
-        return timeB - timeA;
-      });
+    return mapUserNotifications(
+      snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        data: () => docSnap.data() as Record<string, unknown>
+      }))
+    );
   } catch (error) {
     console.error('[Firebase] Erro ao buscar notificações:', error);
     return [];
   }
 }
 
+
+
+export function subscribeToUserNotifications(onChange: (notifications: AdminNotification[]) => void): () => void {
+  if (!IS_FIREBASE_ON) {
+    onChange([]);
+    return () => {};
+  }
+
+  const notificationsRef = collection(db, 'foodai', 'admin', 'notifications');
+
+  return onSnapshot(
+    notificationsRef,
+    (snapshot) => {
+      const notifications = mapUserNotifications(
+        snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          data: () => docSnap.data() as Record<string, unknown>
+        }))
+      );
+
+      onChange(notifications);
+    },
+    (error) => {
+      console.error('[Firebase] Erro no listener de notificações:', error);
+      onChange([]);
+    }
+  );
+}
 
 export async function clearUserNotificationsFromFirebase(notificationIds: string[]): Promise<boolean> {
   if (!IS_FIREBASE_ON || notificationIds.length === 0) return true;
