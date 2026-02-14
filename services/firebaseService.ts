@@ -1,7 +1,7 @@
 
 import { IS_FIREBASE_ON } from '../constants';
 import { db } from '../firebaseConfig';
-import { collection, deleteDoc, doc, getDocs, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import {
   AdminNotification,
   AppNotification,
@@ -104,6 +104,13 @@ export interface FirebaseOrder {
   address: CheckoutDetails['address'];
   status: OrderStatus;
   createdAt: string;
+}
+
+export interface FirebaseCoupon {
+  id: string;
+  code: string;
+  discountPercentage: number;
+  active: boolean;
 }
 
 export function toFirebaseOrder(params: {
@@ -312,4 +319,35 @@ export async function fetchCategoriesFromFirebase(): Promise<Category[] | null> 
 
   console.warn('[Firebase] Nenhuma categoria encontrada (paths testados: categories, foodai/admin/categories).');
   return [];
+}
+
+/**
+ * Busca um cupom no Firestore em foodai/admin/coupons/{CODE}.
+ */
+export async function fetchCouponFromFirebase(code: string): Promise<FirebaseCoupon | null> {
+  if (!IS_FIREBASE_ON) return null;
+
+  const normalizedCode = code.trim().toUpperCase();
+  if (!normalizedCode) return null;
+
+  try {
+    const couponRef = doc(db, 'foodai', 'admin', 'coupons', normalizedCode);
+    const couponSnapshot = await getDoc(couponRef);
+
+    if (!couponSnapshot.exists()) {
+      return null;
+    }
+
+    const couponData = couponSnapshot.data() as Partial<FirebaseCoupon>;
+
+    return {
+      id: couponSnapshot.id,
+      code: typeof couponData.code === 'string' ? couponData.code : couponSnapshot.id,
+      discountPercentage: typeof couponData.discountPercentage === 'number' ? couponData.discountPercentage : 0,
+      active: typeof couponData.active === 'boolean' ? couponData.active : false
+    };
+  } catch (error) {
+    console.error('[Firebase] Erro ao buscar cupom:', error);
+    return null;
+  }
 }
