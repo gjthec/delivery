@@ -1,7 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { X, Trash2, ShoppingBag, ArrowRight, Minus, Plus, CreditCard, MapPin, Wallet, Apple, ChevronRight, CheckCircle2, ShieldCheck, Zap, Ticket, Tag, Percent, XCircle, MapPinned, Home, Navigation2, Briefcase, PlusCircle, Pencil, Trash, QrCode, Banknote, Landmark, Coins, Clock, ChevronUp } from 'lucide-react';
 import { CartItem, Address, PaymentType, CardBrand, CheckoutDetails } from '../types';
+import { fetchCouponFromFirebase, FirebaseCoupon } from '../services/firebaseService';
 
 interface Props {
   isOpen: boolean;
@@ -22,8 +23,9 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
   const [changeFor, setChangeFor] = useState('');
   
   const [couponCode, setCouponCode] = useState('');
-  const [isCouponApplied, setIsCouponApplied] = useState(false);
   const [isCouponModalOpen, setIsCouponModalOpen] = useState(false);
+  const [appliedCoupon, setAppliedCoupon] = useState<FirebaseCoupon | null>(null);
+  const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
   
   // Gestão de Endereços
   const [addresses, setAddresses] = useState<Address[]>([
@@ -65,15 +67,38 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
   }, 0);
   
   const deliveryFee = 5.90; 
-  const discount = isCouponApplied ? subtotal * 0.15 : 0; 
+  const discountPercentage = useMemo(() => (appliedCoupon?.active ? appliedCoupon.discountPercentage : 0), [appliedCoupon]);
+  const discount = subtotal * (discountPercentage / 100);
   const total = subtotal + deliveryFee - discount;
 
-  const handleApplyCoupon = () => {
-    if (couponCode.toUpperCase() === 'FOODAI15' || couponCode.toUpperCase() === 'PROMO10') {
-      setIsCouponApplied(true);
+  const handleApplyCoupon = async () => {
+    const normalizedCode = couponCode.trim().toUpperCase();
+
+    if (!normalizedCode) {
+      alert('Digite um cupom para validar.');
+      return;
+    }
+
+    setIsValidatingCoupon(true);
+
+    try {
+      const coupon = await fetchCouponFromFirebase(normalizedCode);
+
+      if (!coupon) {
+        alert('Cupom não encontrado.');
+        return;
+      }
+
+      if (!coupon.active) {
+        alert('Cupom encontrado, mas está inativo.');
+        return;
+      }
+
+      setAppliedCoupon(coupon);
+      setCouponCode(coupon.code);
       setIsCouponModalOpen(false);
-    } else {
-      alert('Cupom inválido ou expirado.');
+    } finally {
+      setIsValidatingCoupon(false);
     }
   };
 
@@ -129,7 +154,7 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
       });
       setTimeout(() => {
         setStep('cart');
-        setIsCouponApplied(false);
+        setAppliedCoupon(null);
         setCouponCode('');
       }, 500);
     }
@@ -176,7 +201,7 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
               <div className="flex flex-col items-center text-center space-y-4 mb-8">
                 <div className="w-20 h-20 bg-orange-100 dark:bg-orange-500/10 rounded-[2.2rem] flex items-center justify-center text-orange-500 shadow-inner"><Ticket size={40} className="rotate-[-15deg]" /></div>
                 <h3 className="text-2xl font-black tracking-tighter">Aplicar Cupom</h3>
-                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Tente FOODAI15</p>
+                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Digite seu cupom</p>
               </div>
               <div className="space-y-4">
                 <input 
@@ -187,7 +212,7 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
                   className="w-full bg-zinc-50 dark:bg-zinc-800/50 border-2 border-transparent focus:border-orange-500/30 rounded-2xl px-6 py-4 text-center text-xl font-black outline-none transition-all uppercase placeholder:text-zinc-300" 
                   autoFocus 
                 />
-                <button onClick={handleApplyCoupon} className="w-full py-5 orange-gradient text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl shadow-orange-500/20 active:scale-95 transition-all">Validar Cupom</button>
+                <button disabled={isValidatingCoupon} onClick={handleApplyCoupon} className="w-full py-5 orange-gradient text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl shadow-orange-500/20 active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed">{isValidatingCoupon ? 'Validando...' : 'Validar Cupom'}</button>
               </div>
             </div>
          </div>
@@ -315,16 +340,16 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
                 {/* Cupom Passo 1 */}
                 <div className="px-2">
                   <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-400 mb-4">Vantagens</h3>
-                  {isCouponApplied ? (
+                  {appliedCoupon?.active ? (
                     <div className="bg-green-50 dark:bg-green-500/10 border-2 border-dashed border-green-500/30 rounded-[1.8rem] p-5 flex items-center justify-between animate-in slide-in-from-top-2">
                        <div className="flex items-center gap-4">
                           <div className="w-12 h-12 bg-green-500 text-white rounded-xl flex items-center justify-center shadow-lg"><CheckCircle2 size={24} /></div>
                           <div>
-                             <p className="text-sm font-black text-green-700 dark:text-green-400 uppercase tracking-widest">Cupom Ativado!</p>
-                             <p className="text-[11px] font-bold text-green-600/60 uppercase">-15% de Desconto aplicado</p>
+                             <p className="text-sm font-black text-green-700 dark:text-green-400 uppercase tracking-widest">Cupom {appliedCoupon.code} ativo!</p>
+                             <p className="text-[11px] font-bold text-green-600/60 uppercase">-{discountPercentage}% de Desconto aplicado</p>
                           </div>
                        </div>
-                       <button onClick={() => setIsCouponApplied(false)} className="text-zinc-400 hover:text-red-500 p-2"><X size={20} /></button>
+                       <button onClick={() => setAppliedCoupon(null)} className="text-zinc-400 hover:text-red-500 p-2"><X size={20} /></button>
                     </div>
                   ) : (
                     <button 
@@ -353,7 +378,7 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
                       <span>Taxa de Entrega</span>
                       <span className="text-green-600 font-black">R$ {deliveryFee.toFixed(2)}</span>
                    </div>
-                   {isCouponApplied && (
+                   {appliedCoupon?.active && (
                      <div className="flex justify-between items-center text-[11px] font-bold text-green-600 uppercase tracking-widest">
                         <span>Desconto Cupom</span>
                         <span className="font-black">- R$ {discount.toFixed(2)}</span>
@@ -475,7 +500,7 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
                       <span>Taxa de Entrega</span>
                       <span className="text-green-600">R$ {deliveryFee.toFixed(2)}</span>
                    </div>
-                   {isCouponApplied && (
+                   {appliedCoupon?.active && (
                      <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-green-600">
                         <span>Desconto Cupom Ativo</span>
                         <span>- R$ {discount.toFixed(2)}</span>
