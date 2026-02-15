@@ -12,9 +12,10 @@ interface Props {
   onEdit: (index: number) => void;
   onClear: () => void;
   onCheckout: (details: CheckoutDetails) => void;
+  deliveryFee: number;
 }
 
-const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onEdit, onClear, onCheckout }) => {
+const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onEdit, onClear, onCheckout, deliveryFee }) => {
   const [step, setStep] = useState<'cart' | 'checkout'>('cart');
   
   // Estado de Pagamento
@@ -77,7 +78,6 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
     return acc + (ci.item.price + extrasTotal) * ci.quantity;
   }, 0);
   
-  const deliveryFee = 5.90; 
   const discountPercentage = useMemo(() => {
     if (!appliedCoupon?.active) return 0;
     return Math.max(appliedCoupon.discountPercentage, 0);

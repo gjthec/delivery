@@ -10,7 +10,7 @@ import ItemDetailModal from './components/ItemDetailModal';
 import { MENU_ITEMS, CATEGORIES, IS_FIREBASE_ON } from './constants';
 import { AdminNotification, MenuItem, FilterType, CartItem, ExtraItem, CheckoutDetails, Category } from './types';
 import { askWaiter } from './services/geminiService';
-import { clearUserNotificationsFromFirebase, fetchCategoriesFromFirebase, fetchMenuFromFirebase, saveOrderToFirebase, subscribeToUserNotifications, toFirebaseOrder } from './services/firebaseService';
+import { clearUserNotificationsFromFirebase, fetchCategoriesFromFirebase, fetchMenuFromFirebase, fetchStoreSettingsFromFirebase, saveOrderToFirebase, subscribeToUserNotifications, toFirebaseOrder } from './services/firebaseService';
 
 interface AiSuggestion {
   itemId: string;
@@ -30,6 +30,7 @@ const App: React.FC = () => {
   const [menuItems, setMenuItems] = useState<MenuItem[]>(MENU_ITEMS);
   const [categories, setCategories] = useState<Category[]>(CATEGORIES);
   const [isLoadingData, setIsLoadingData] = useState(false);
+  const [deliveryFee, setDeliveryFee] = useState(5.90);
 
   // Estados de UI
   const [searchQuery, setSearchQuery] = useState('');
@@ -66,13 +67,15 @@ const App: React.FC = () => {
     if (IS_FIREBASE_ON) {
       const loadFirebaseData = async () => {
         setIsLoadingData(true);
-        const [fbMenu, fbCategories] = await Promise.all([
+        const [fbMenu, fbCategories, fbStoreSettings] = await Promise.all([
           fetchMenuFromFirebase(),
-          fetchCategoriesFromFirebase()
+          fetchCategoriesFromFirebase(),
+          fetchStoreSettingsFromFirebase()
         ]);
         
         if (fbMenu) setMenuItems(fbMenu);
         if (fbCategories) setCategories(fbCategories);
+        if (fbStoreSettings?.deliveryFee !== undefined) setDeliveryFee(fbStoreSettings.deliveryFee);
         setIsLoadingData(false);
       };
       loadFirebaseData();
@@ -212,7 +215,6 @@ const App: React.FC = () => {
       const extrasTotal = ci.selectedExtras.reduce((ea, ec) => ea + ec.price, 0);
       return acc + ((ci.item.price + extrasTotal) * ci.quantity);
     }, 0);
-    const deliveryFee = 5.90;
     const finalTotal = subtotal + deliveryFee;
 
     const orderId = generateOrderId();
@@ -344,6 +346,7 @@ const App: React.FC = () => {
         onEdit={handleEditCartItem}
         onClear={() => setCart([])}
         onCheckout={handleCheckout}
+        deliveryFee={deliveryFee}
       />
 
       <PixPaymentModal 
