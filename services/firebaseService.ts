@@ -375,6 +375,42 @@ export async function fetchCouponFromFirebase(code: string): Promise<FirebaseCou
 }
 
 /**
+ * Escuta em tempo real as configurações da loja em foodai/admin/settings/store.
+ */
+export function subscribeToStoreSettingsFromFirebase(onChange: (settings: FirebaseStoreSettings | null) => void): () => void {
+  if (!IS_FIREBASE_ON) {
+    onChange(null);
+    return () => {};
+  }
+
+  const settingsRef = doc(db, 'foodai', 'admin', 'settings', 'store');
+
+  return onSnapshot(
+    settingsRef,
+    (snapshot) => {
+      if (!snapshot.exists()) {
+        onChange(null);
+        return;
+      }
+
+      const settingsData = snapshot.data() as Record<string, unknown>;
+      const deliveryFee = parseNumericValue(settingsData.deliveryFee);
+
+      if (deliveryFee === undefined) {
+        onChange(null);
+        return;
+      }
+
+      onChange({ deliveryFee });
+    },
+    (error) => {
+      console.error('[Firebase] Erro no listener de configurações da loja:', error);
+      onChange(null);
+    }
+  );
+}
+
+/**
  * Busca as configurações da loja no Firestore em foodai/admin/settings/store.
  */
 export async function fetchStoreSettingsFromFirebase(): Promise<FirebaseStoreSettings | null> {
