@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { X, Trash2, ShoppingBag, ArrowRight, Minus, Plus, CreditCard, MapPin, Wallet, Apple, ChevronRight, CheckCircle2, ShieldCheck, Zap, Ticket, Tag, Percent, XCircle, MapPinned, Home, Navigation2, Briefcase, PlusCircle, Pencil, Trash, QrCode, Banknote, Landmark, Coins, Clock, ChevronUp } from 'lucide-react';
 import { CartItem, Address, PaymentType, CardBrand, CheckoutDetails } from '../types';
 import { fetchCouponFromFirebase, FirebaseCoupon } from '../services/firebaseService';
@@ -26,6 +26,7 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
   const [isCouponModalOpen, setIsCouponModalOpen] = useState(false);
   const [appliedCoupon, setAppliedCoupon] = useState<FirebaseCoupon | null>(null);
   const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
+  const [feedback, setFeedback] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
   
   // Gestão de Endereços
   const [addresses, setAddresses] = useState<Address[]>([
@@ -61,6 +62,16 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
 
   const selectedAddress = addresses.find(a => a.id === selectedAddressId) || addresses[0];
 
+  useEffect(() => {
+    if (!feedback) return;
+
+    const timeoutId = setTimeout(() => {
+      setFeedback(null);
+    }, 2600);
+
+    return () => clearTimeout(timeoutId);
+  }, [feedback]);
+
   const subtotal = cartItems.reduce((acc, ci) => {
     const extrasTotal = ci.selectedExtras.reduce((a, b) => a + b.price, 0);
     return acc + (ci.item.price + extrasTotal) * ci.quantity;
@@ -75,7 +86,7 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
     const normalizedCode = couponCode.trim().toUpperCase();
 
     if (!normalizedCode) {
-      alert('Digite um cupom para validar.');
+      setFeedback({ message: 'Digite um cupom para validar.', type: 'error' });
       return;
     }
 
@@ -85,18 +96,19 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
       const coupon = await fetchCouponFromFirebase(normalizedCode);
 
       if (!coupon) {
-        alert('Cupom não encontrado.');
+        setFeedback({ message: 'Cupom não encontrado.', type: 'error' });
         return;
       }
 
       if (!coupon.active) {
-        alert('Cupom encontrado, mas está inativo.');
+        setFeedback({ message: 'Cupom encontrado, mas está inativo.', type: 'error' });
         return;
       }
 
       setAppliedCoupon(coupon);
       setCouponCode(coupon.code);
       setIsCouponModalOpen(false);
+      setFeedback({ message: `Cupom ${coupon.code} aplicado com sucesso!`, type: 'success' });
     } finally {
       setIsValidatingCoupon(false);
     }
@@ -125,7 +137,7 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
 
   const handleSaveAddress = () => {
     if (!formAddress.street || !formAddress.number || !formAddress.label) {
-      alert('Por favor, preencha os campos obrigatórios.');
+      setFeedback({ message: 'Por favor, preencha os campos obrigatórios.', type: 'error' });
       return;
     }
 
@@ -187,6 +199,24 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
 
   return (
     <>
+      {feedback && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[150] px-4 w-full max-w-md">
+          <div
+            className={`w-full rounded-2xl border px-4 py-3 shadow-2xl backdrop-blur-xl animate-in slide-in-from-top-2 duration-300 ${feedback.type === 'error'
+              ? 'bg-red-50/95 border-red-200 text-red-700 dark:bg-red-500/10 dark:border-red-500/30 dark:text-red-200'
+              : 'bg-emerald-50/95 border-emerald-200 text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/30 dark:text-emerald-200'
+              }`}
+            role="status"
+            aria-live="polite"
+          >
+            <div className="flex items-center gap-3">
+              {feedback.type === 'error' ? <XCircle size={18} className="shrink-0" /> : <CheckCircle2 size={18} className="shrink-0" />}
+              <p className="text-sm font-bold tracking-tight">{feedback.message}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div 
         className={`fixed inset-0 bg-black/40 dark:bg-black/90 backdrop-blur-xl z-[105] transition-opacity duration-700 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
         onClick={closeAndReset}
