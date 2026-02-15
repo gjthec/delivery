@@ -114,6 +114,25 @@ export interface FirebaseCoupon {
   active: boolean;
 }
 
+export interface FirebaseStoreSettings {
+  deliveryFee: number;
+}
+
+function parseNumericValue(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value.replace(',', '.'));
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return undefined;
+}
+
 export function toFirebaseOrder(params: {
   id: string;
   customerName: string;
@@ -326,21 +345,6 @@ export async function fetchCategoriesFromFirebase(): Promise<Category[] | null> 
  * Busca um cupom no Firestore em foodai/admin/coupons/{CODE}.
  */
 
-function parseCouponNumericValue(value: unknown): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === 'string') {
-    const parsed = Number(value.replace(',', '.'));
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-
-  return undefined;
-}
-
 export async function fetchCouponFromFirebase(code: string): Promise<FirebaseCoupon | null> {
   if (!IS_FIREBASE_ON) return null;
 
@@ -360,12 +364,76 @@ export async function fetchCouponFromFirebase(code: string): Promise<FirebaseCou
     return {
       id: couponSnapshot.id,
       code: typeof couponData.code === 'string' ? couponData.code : couponSnapshot.id,
-      discountPercentage: parseCouponNumericValue(couponData.discountPercentage) ?? 0,
-      maxDiscountValue: parseCouponNumericValue(couponData.maxDiscountValue),
+      discountPercentage: parseNumericValue(couponData.discountPercentage) ?? 0,
+      maxDiscountValue: parseNumericValue(couponData.maxDiscountValue),
       active: typeof couponData.active === 'boolean' ? couponData.active : false
     };
   } catch (error) {
     console.error('[Firebase] Erro ao buscar cupom:', error);
+    return null;
+  }
+}
+
+/**
+ * Escuta em tempo real as configurações da loja em foodai/admin/settings/store.
+ */
+export function subscribeToStoreSettingsFromFirebase(onChange: (settings: FirebaseStoreSettings | null) => void): () => void {
+  if (!IS_FIREBASE_ON) {
+    onChange(null);
+    return () => {};
+  }
+
+  const settingsRef = doc(db, 'foodai', 'admin', 'settings', 'store');
+
+  return onSnapshot(
+    settingsRef,
+    (snapshot) => {
+      if (!snapshot.exists()) {
+        onChange(null);
+        return;
+      }
+
+      const settingsData = snapshot.data() as Record<string, unknown>;
+      const deliveryFee = parseNumericValue(settingsData.deliveryFee);
+
+      if (deliveryFee === undefined) {
+        onChange(null);
+        return;
+      }
+
+      onChange({ deliveryFee });
+    },
+    (error) => {
+      console.error('[Firebase] Erro no listener de configurações da loja:', error);
+      onChange(null);
+    }
+  );
+}
+
+/**
+ * Busca as configurações da loja no Firestore em foodai/admin/settings/store.
+ */
+export async function fetchStoreSettingsFromFirebase(): Promise<FirebaseStoreSettings | null> {
+  if (!IS_FIREBASE_ON) return null;
+
+  try {
+    const settingsRef = doc(db, 'foodai', 'admin', 'settings', 'store');
+    const settingsSnapshot = await getDoc(settingsRef);
+
+    if (!settingsSnapshot.exists()) {
+      return null;
+    }
+
+    const settingsData = settingsSnapshot.data() as Record<string, unknown>;
+    const deliveryFee = parseNumericValue(settingsData.deliveryFee);
+
+    if (deliveryFee === undefined) {
+      return null;
+    }
+
+    return { deliveryFee };
+  } catch (error) {
+    console.error('[Firebase] Erro ao buscar configurações da loja:', error);
     return null;
   }
 }
