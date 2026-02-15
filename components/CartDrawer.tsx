@@ -78,9 +78,14 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
   }, 0);
   
   const deliveryFee = 5.90; 
-  const discountPercentage = useMemo(() => (appliedCoupon?.active ? appliedCoupon.discountPercentage : 0), [appliedCoupon]);
+  const discountPercentage = useMemo(() => {
+    if (!appliedCoupon?.active) return 0;
+    return Math.max(appliedCoupon.discountPercentage, 0);
+  }, [appliedCoupon]);
   const rawDiscount = subtotal * (discountPercentage / 100);
-  const maxDiscountValue = appliedCoupon?.active ? appliedCoupon.maxDiscountValue : undefined;
+  const maxDiscountValue = appliedCoupon?.active && typeof appliedCoupon.maxDiscountValue === 'number'
+    ? Math.max(appliedCoupon.maxDiscountValue, 0)
+    : undefined;
   const discountWithCap = typeof maxDiscountValue === 'number' ? Math.min(rawDiscount, maxDiscountValue) : rawDiscount;
   const discount = Math.min(discountWithCap, subtotal);
   const total = subtotal + deliveryFee - discount;
