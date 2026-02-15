@@ -110,6 +110,7 @@ export interface FirebaseCoupon {
   id: string;
   code: string;
   discountPercentage: number;
+  maxDiscountValue?: number;
   active: boolean;
 }
 
@@ -324,6 +325,22 @@ export async function fetchCategoriesFromFirebase(): Promise<Category[] | null> 
 /**
  * Busca um cupom no Firestore em foodai/admin/coupons/{CODE}.
  */
+
+function parseCouponNumericValue(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value.replace(',', '.'));
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return undefined;
+}
+
 export async function fetchCouponFromFirebase(code: string): Promise<FirebaseCoupon | null> {
   if (!IS_FIREBASE_ON) return null;
 
@@ -343,7 +360,8 @@ export async function fetchCouponFromFirebase(code: string): Promise<FirebaseCou
     return {
       id: couponSnapshot.id,
       code: typeof couponData.code === 'string' ? couponData.code : couponSnapshot.id,
-      discountPercentage: typeof couponData.discountPercentage === 'number' ? couponData.discountPercentage : 0,
+      discountPercentage: parseCouponNumericValue(couponData.discountPercentage) ?? 0,
+      maxDiscountValue: parseCouponNumericValue(couponData.maxDiscountValue),
       active: typeof couponData.active === 'boolean' ? couponData.active : false
     };
   } catch (error) {
