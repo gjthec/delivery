@@ -110,6 +110,7 @@ export interface FirebaseCoupon {
   id: string;
   code: string;
   discountPercentage: number;
+  maxDiscountValue?: number;
   active: boolean;
 }
 
@@ -344,6 +345,7 @@ export async function fetchCouponFromFirebase(code: string): Promise<FirebaseCou
       id: couponSnapshot.id,
       code: typeof couponData.code === 'string' ? couponData.code : couponSnapshot.id,
       discountPercentage: typeof couponData.discountPercentage === 'number' ? couponData.discountPercentage : 0,
+      maxDiscountValue: typeof couponData.maxDiscountValue === 'number' ? couponData.maxDiscountValue : undefined,
       active: typeof couponData.active === 'boolean' ? couponData.active : false
     };
   } catch (error) {

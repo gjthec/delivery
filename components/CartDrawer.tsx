@@ -79,7 +79,10 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
   
   const deliveryFee = 5.90; 
   const discountPercentage = useMemo(() => (appliedCoupon?.active ? appliedCoupon.discountPercentage : 0), [appliedCoupon]);
-  const discount = subtotal * (discountPercentage / 100);
+  const rawDiscount = subtotal * (discountPercentage / 100);
+  const maxDiscountValue = appliedCoupon?.active ? appliedCoupon.maxDiscountValue : undefined;
+  const discountWithCap = typeof maxDiscountValue === 'number' ? Math.min(rawDiscount, maxDiscountValue) : rawDiscount;
+  const discount = Math.min(discountWithCap, subtotal);
   const total = subtotal + deliveryFee - discount;
 
   const handleApplyCoupon = async () => {
@@ -376,7 +379,7 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
                           <div className="w-12 h-12 bg-green-500 text-white rounded-xl flex items-center justify-center shadow-lg"><CheckCircle2 size={24} /></div>
                           <div>
                              <p className="text-sm font-black text-green-700 dark:text-green-400 uppercase tracking-widest">Cupom {appliedCoupon.code} ativo!</p>
-                             <p className="text-[11px] font-bold text-green-600/60 uppercase">-{discountPercentage}% de Desconto aplicado</p>
+                             <p className="text-[11px] font-bold text-green-600/60 uppercase">-{discountPercentage}% de Desconto aplicado{typeof maxDiscountValue === 'number' ? ` (máx. R$ ${maxDiscountValue.toFixed(2)})` : ''}</p>
                           </div>
                        </div>
                        <button onClick={() => setAppliedCoupon(null)} className="text-zinc-400 hover:text-red-500 p-2"><X size={20} /></button>
