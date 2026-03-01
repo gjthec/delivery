@@ -88,6 +88,7 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
   };
 
   const selectedAddress = addresses.find(a => a.id === selectedAddressId) || addresses[0] || fallbackAddress;
+  const needsCustomerSetup = !customerPhone.trim() || !customerName.trim();
 
   useEffect(() => {
     if (!feedback) return;
@@ -522,36 +523,53 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
                 {/* Checkout Step */}
                 <div className="space-y-4">
                   <h3 className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-400 px-2">Seus Dados</h3>
-                  <div className="p-5 bg-zinc-50/80 dark:bg-zinc-900/40 border border-zinc-100 dark:border-zinc-800 rounded-[2.5rem] space-y-4">
-                    <div>
-                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block mb-2 px-1">Nome Completo</label>
-                      <input
-                        type="text"
-                        placeholder="Ex: João da Silva"
-                        value={customerName}
-                        onChange={(e) => setCustomerName(e.target.value)}
-                        className="w-full bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-800 focus:border-orange-500/50 rounded-2xl px-4 py-3 text-sm font-black outline-none transition-all"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block mb-2 px-1">Telefone / WhatsApp</label>
-                      <div className="relative">
-                        <input
-                          type="tel"
-                          placeholder="Ex: (11) 99999-9999"
-                          value={customerPhone}
-                          onChange={(e) => setCustomerPhone(e.target.value)}
-                          onBlur={handlePhoneBlur}
-                          className="w-full bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-800 focus:border-orange-500/50 rounded-2xl px-4 py-3 text-sm font-black outline-none transition-all"
-                        />
-                        {isFetchingUser && (
-                          <div className="absolute right-4 top-1/2 -translate-y-1/2 text-orange-500">
-                            <Loader2 size={18} className="animate-spin" />
-                          </div>
-                        )}
+                  {needsCustomerSetup ? (
+                    <div className="p-5 bg-zinc-50/80 dark:bg-zinc-900/40 border border-zinc-100 dark:border-zinc-800 rounded-[2.5rem] space-y-4">
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block mb-2 px-1">Telefone / WhatsApp</label>
+                        <div className="relative">
+                          <input
+                            type="tel"
+                            placeholder="Ex: (11) 99999-9999"
+                            value={customerPhone}
+                            onChange={(e) => setCustomerPhone(e.target.value)}
+                            onBlur={handlePhoneBlur}
+                            className="w-full bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-800 focus:border-orange-500/50 rounded-2xl px-4 py-3 text-sm font-black outline-none transition-all"
+                          />
+                          {isFetchingUser && (
+                            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-orange-500">
+                              <Loader2 size={18} className="animate-spin" />
+                            </div>
+                          )}
+                        </div>
                       </div>
+
+                      {!customerName.trim() && (
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block mb-2 px-1">Nome Completo</label>
+                          <input
+                            type="text"
+                            placeholder="Ex: João da Silva"
+                            value={customerName}
+                            onChange={(e) => setCustomerName(e.target.value)}
+                            className="w-full bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-800 focus:border-orange-500/50 rounded-2xl px-4 py-3 text-sm font-black outline-none transition-all"
+                          />
+                        </div>
+                      )}
+
+                      <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1">
+                        No próximo pedido seus dados serão preenchidos automaticamente.
+                      </p>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="p-5 bg-zinc-50/80 dark:bg-zinc-900/40 border border-zinc-100 dark:border-zinc-800 rounded-[2.5rem] space-y-2">
+                      <p className="text-sm font-black text-zinc-900 dark:text-zinc-100">{customerName}</p>
+                      <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-widest">{customerPhone}</p>
+                      <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                        Para editar seus dados, use Meu Perfil em Configurações.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-3">
