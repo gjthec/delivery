@@ -212,7 +212,7 @@ export async function fetchOrdersByPhone(phone: string): Promise<FirebaseOrder[]
 
   try {
     if (normalizedPhone) {
-      const userOrdersSnapshot = await getDocs(collection(db, 'foodai', 'user', normalizedPhone, 'orders'));
+      const userOrdersSnapshot = await getDocs(collection(db, 'foodai', 'user', normalizedPhone, 'profile', 'orders'));
       if (!userOrdersSnapshot.empty) {
         return userOrdersSnapshot.docs
           .map((docSnap) => ({
@@ -251,7 +251,7 @@ export async function fetchOrdersByPhone(phone: string): Promise<FirebaseOrder[]
       const matchedOrders: FirebaseOrder[] = [];
 
       if (normalizedPhone) {
-        const userOrdersSnapshot = await getDocs(collection(db, 'foodai', 'user', normalizedPhone, 'orders'));
+        const userOrdersSnapshot = await getDocs(collection(db, 'foodai', 'user', normalizedPhone, 'profile', 'orders'));
         userOrdersSnapshot.docs.forEach((docSnap) => {
           matchedOrders.push({ ...(docSnap.data() as FirebaseOrder), id: docSnap.id });
         });
@@ -304,7 +304,7 @@ export async function saveOrderToFirebase(orderData: FirebaseOrder): Promise<boo
 
     if (userPhoneDocId) {
       const userProfileRef = doc(db, 'foodai', 'user', userPhoneDocId, 'profile');
-      const userOrdersRef = collection(db, 'foodai', 'user', userPhoneDocId, 'orders');
+      const userOrdersRef = collection(db, 'foodai', 'user', userPhoneDocId, 'profile', 'orders');
       const userOrderRef = doc(userOrdersRef, orderData.id);
 
       await Promise.all([
