@@ -7,6 +7,7 @@ import CartDrawer from './components/CartDrawer';
 import PixPaymentModal from './components/PixPaymentModal';
 import CategoryIcon from './components/CategoryIcon';
 import ItemDetailModal from './components/ItemDetailModal';
+import ProfileModal from './components/ProfileModal';
 import { MENU_ITEMS, CATEGORIES, IS_FIREBASE_ON } from './constants';
 import { AdminNotification, MenuItem, FilterType, CartItem, ExtraItem, CheckoutDetails, Category } from './types';
 import { askWaiter } from './services/geminiService';
@@ -42,6 +43,7 @@ const App: React.FC = () => {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCartJiggling, setIsCartJiggling] = useState(false);
   const [isPixModalOpen, setIsPixModalOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [currentTotal, setCurrentTotal] = useState(0);
   const [checkoutSession, setCheckoutSession] = useState<CheckoutSession | null>(null);
   
@@ -102,12 +104,12 @@ const App: React.FC = () => {
   }, [darkMode]);
 
   useEffect(() => {
-    if (isCartOpen || isPixModalOpen || isDetailModalOpen) {
+    if (isCartOpen || isPixModalOpen || isDetailModalOpen || isProfileOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'unset';
     }
-  }, [isCartOpen, isPixModalOpen, isDetailModalOpen]);
+  }, [isCartOpen, isPixModalOpen, isDetailModalOpen, isProfileOpen]);
 
 
   useEffect(() => {
@@ -198,6 +200,11 @@ const App: React.FC = () => {
     if (details.payment.brand) message += ` - Bandeira: ${details.payment.brand.toUpperCase()}`;
     if (details.payment.changeFor) message += `%0A*Troco para:* R$ ${details.payment.changeFor}`;
     
+    if (details.customer) {
+      message += `%0A%0A*Cliente:* ${details.customer.name}`;
+      message += `%0A*Telefone:* ${details.customer.phone}`;
+    }
+
     message += `%0A%0A*VALOR TOTAL: R$ ${total.toFixed(2)}*`;
     message += `%0A%0A_Enviado via FoodAI App_`;
     
@@ -209,7 +216,7 @@ const App: React.FC = () => {
   const processOrderToDatabase = async (orderId: string, details: CheckoutDetails, items: CartItem[], total: number) => {
     const orderForDb = toFirebaseOrder({
       id: orderId,
-      customerName: 'Cliente FoodAI',
+      customerName: details.customer.name || 'Cliente FoodAI',
       details,
       items,
       total
@@ -345,9 +352,15 @@ const App: React.FC = () => {
           notifications={notifications}
           onReadNotifications={markNotificationsAsRead}
           onClearNotifications={clearNotifications}
+          onOpenProfile={() => setIsProfileOpen(true)}
         />
       </div>
       
+      <ProfileModal
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+      />
+
       <CartDrawer 
         isOpen={isCartOpen} 
         onClose={() => setIsCartOpen(false)} 

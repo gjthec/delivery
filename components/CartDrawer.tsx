@@ -1,8 +1,8 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, Trash2, ShoppingBag, ArrowRight, Minus, Plus, CreditCard, MapPin, Wallet, Apple, ChevronRight, CheckCircle2, ShieldCheck, Zap, Ticket, Tag, Percent, XCircle, MapPinned, Home, Navigation2, Briefcase, PlusCircle, Pencil, Trash, QrCode, Banknote, Landmark, Coins, Clock, ChevronUp } from 'lucide-react';
+import { X, Trash2, ShoppingBag, ArrowRight, Minus, Plus, CreditCard, MapPin, Wallet, Apple, ChevronRight, CheckCircle2, ShieldCheck, Zap, Ticket, Tag, Percent, XCircle, MapPinned, Home, Navigation2, Briefcase, PlusCircle, Pencil, Trash, QrCode, Banknote, Landmark, Coins, Clock, ChevronUp, Loader2 } from 'lucide-react';
 import { CartItem, Address, PaymentType, CardBrand, CheckoutDetails } from '../types';
-import { fetchCouponFromFirebase, FirebaseCoupon } from '../services/firebaseService';
+import { fetchCouponFromFirebase, fetchOrdersByPhone, FirebaseCoupon } from '../services/firebaseService';
 
 interface Props {
   isOpen: boolean;
@@ -17,6 +17,9 @@ interface Props {
 
 const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onEdit, onClear, onCheckout, deliveryFee }) => {
   const [step, setStep] = useState<'cart' | 'checkout'>('cart');
+  const [customerName, setCustomerName] = useState(() => localStorage.getItem('foodai-customer-name') || '');
+  const [customerPhone, setCustomerPhone] = useState(() => localStorage.getItem('foodai-customer-phone') || '');
+  const [isFetchingUser, setIsFetchingUser] = useState(false);
   
   // Estado de Pagamento
   const [paymentType, setPaymentType] = useState<PaymentType>('credit');
@@ -30,21 +33,32 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
   const [feedback, setFeedback] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
   
   // Gestão de Endereços
-  const [addresses, setAddresses] = useState<Address[]>([
-    {
-      id: '1',
-      label: 'Minha Casa',
-      type: 'home',
-      street: 'Rua das Flores',
-      number: '123',
-      complement: 'Apto 42',
-      neighborhood: 'Jardim Paulista',
-      city: 'São Paulo',
-      state: 'SP',
-      zipCode: '01234-567'
+  const [addresses, setAddresses] = useState<Address[]>(() => {
+    const savedAddresses = localStorage.getItem('foodai-addresses');
+    if (savedAddresses) {
+      try {
+        return JSON.parse(savedAddresses) as Address[];
+      } catch {
+        return [];
+      }
     }
-  ]);
-  const [selectedAddressId, setSelectedAddressId] = useState<string>('1');
+
+    return [
+      {
+        id: '1',
+        label: 'Minha Casa',
+        type: 'home',
+        street: 'Rua das Flores',
+        number: '123',
+        complement: 'Apto 42',
+        neighborhood: 'Jardim Paulista',
+        city: 'São Paulo',
+        state: 'SP',
+        zipCode: '01234-567'
+      }
+    ];
+  });
+  const [selectedAddressId, setSelectedAddressId] = useState<string>(() => localStorage.getItem('foodai-selected-address') || '1');
   const [isAddressListOpen, setIsAddressListOpen] = useState(false);
   const [isAddressFormOpen, setIsAddressFormOpen] = useState(false);
   const [editingAddress, setEditingAddress] = useState<Address | null>(null);
@@ -61,7 +75,19 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
     zipCode: ''
   });
 
-  const selectedAddress = addresses.find(a => a.id === selectedAddressId) || addresses[0];
+  const fallbackAddress: Address = {
+    id: 'fallback',
+    label: 'Endereço principal',
+    type: 'home',
+    street: '',
+    number: '',
+    neighborhood: '',
+    city: '',
+    state: '',
+    zipCode: ''
+  };
+
+  const selectedAddress = addresses.find(a => a.id === selectedAddressId) || addresses[0] || fallbackAddress;
 
   useEffect(() => {
     if (!feedback) return;
@@ -150,21 +176,84 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
     }
 
     if (editingAddress) {
-      setAddresses(prev => prev.map(a => a.id === editingAddress.id ? { ...formAddress, id: a.id } : a));
+      const updated = addresses.map(a => a.id === editingAddress.id ? { ...formAddress, id: a.id } : a);
+      setAddresses(updated);
+      localStorage.setItem('foodai-addresses', JSON.stringify(updated));
     } else {
       const newId = Math.random().toString(36).substr(2, 9);
       const newAddress = { ...formAddress, id: newId };
-      setAddresses(prev => [...prev, newAddress]);
+      const updated = [...addresses, newAddress];
+      setAddresses(updated);
+      localStorage.setItem('foodai-addresses', JSON.stringify(updated));
       setSelectedAddressId(newId);
+      localStorage.setItem('foodai-selected-address', newId);
     }
     setIsAddressFormOpen(false);
     setIsAddressListOpen(true);
   };
 
+  const handlePhoneBlur = async () => {
+    if (!customerPhone.trim()) return;
+
+    setIsFetchingUser(true);
+    const fetchedOrders = await fetchOrdersByPhone(customerPhone);
+
+    if (fetchedOrders && fetchedOrders.length > 0) {
+      const latestOrder = fetchedOrders[0];
+
+      if (!customerName && latestOrder.customer?.name) {
+        setCustomerName(latestOrder.customer.name);
+      }
+
+      const updatedAddresses = [...addresses];
+      let addressesUpdated = false;
+
+      fetchedOrders.forEach((order) => {
+        if (!order.customer?.address) return;
+
+        const addr = order.customer.address;
+        const exists = updatedAddresses.some((existing) => (
+          existing.street === addr.street
+          && existing.number === addr.number
+          && existing.zipCode === addr.zipCode
+        ));
+
+        if (!exists) {
+          updatedAddresses.push({ ...addr, id: Math.random().toString(36).substring(2, 11) });
+          addressesUpdated = true;
+        }
+      });
+
+      if (addressesUpdated) {
+        setAddresses(updatedAddresses);
+        localStorage.setItem('foodai-addresses', JSON.stringify(updatedAddresses));
+      }
+    }
+
+    setIsFetchingUser(false);
+  };
+
   const handleNextStep = () => {
     if (step === 'cart') setStep('checkout');
     else {
+      if (!customerName.trim() || !customerPhone.trim()) {
+        setFeedback({ message: 'Por favor, preencha nome e telefone.', type: 'error' });
+        return;
+      }
+
+      if (!selectedAddress) {
+        setFeedback({ message: 'Selecione um endereço para continuar.', type: 'error' });
+        return;
+      }
+
+      localStorage.setItem('foodai-customer-name', customerName);
+      localStorage.setItem('foodai-customer-phone', customerPhone);
+
       onCheckout({
+        customer: {
+          name: customerName,
+          phone: customerPhone
+        },
         payment: {
           type: paymentType,
           brand: (paymentType === 'credit' || paymentType === 'debit') ? cardBrand : undefined,
@@ -270,7 +359,7 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
               {addresses.map((addr) => (
                 <div 
                   key={addr.id}
-                  onClick={() => { setSelectedAddressId(addr.id); setIsAddressListOpen(false); }}
+                  onClick={() => { setSelectedAddressId(addr.id); localStorage.setItem('foodai-selected-address', addr.id); setIsAddressListOpen(false); }}
                   className={`relative flex items-center gap-4 p-4 rounded-2xl border-2 transition-all cursor-pointer ${selectedAddressId === addr.id ? 'border-orange-500 bg-orange-50/50' : 'border-zinc-50 dark:border-zinc-800'}`}
                 >
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${selectedAddressId === addr.id ? 'bg-orange-500 text-white' : 'bg-zinc-100 dark:bg-zinc-800'}`}>{getAddressIcon(addr.type)}</div>
@@ -431,6 +520,40 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
             ) : (
               <div className="max-w-xl mx-auto w-full space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10">
                 {/* Checkout Step */}
+                <div className="space-y-4">
+                  <h3 className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-400 px-2">Seus Dados</h3>
+                  <div className="p-5 bg-zinc-50/80 dark:bg-zinc-900/40 border border-zinc-100 dark:border-zinc-800 rounded-[2.5rem] space-y-4">
+                    <div>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block mb-2 px-1">Nome Completo</label>
+                      <input
+                        type="text"
+                        placeholder="Ex: João da Silva"
+                        value={customerName}
+                        onChange={(e) => setCustomerName(e.target.value)}
+                        className="w-full bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-800 focus:border-orange-500/50 rounded-2xl px-4 py-3 text-sm font-black outline-none transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block mb-2 px-1">Telefone / WhatsApp</label>
+                      <div className="relative">
+                        <input
+                          type="tel"
+                          placeholder="Ex: (11) 99999-9999"
+                          value={customerPhone}
+                          onChange={(e) => setCustomerPhone(e.target.value)}
+                          onBlur={handlePhoneBlur}
+                          className="w-full bg-white dark:bg-zinc-900 border-2 border-zinc-200 dark:border-zinc-800 focus:border-orange-500/50 rounded-2xl px-4 py-3 text-sm font-black outline-none transition-all"
+                        />
+                        {isFetchingUser && (
+                          <div className="absolute right-4 top-1/2 -translate-y-1/2 text-orange-500">
+                            <Loader2 size={18} className="animate-spin" />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="space-y-3">
                   <div className="flex justify-between items-end px-2">
                     <h3 className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-400">Entrega em</h3>

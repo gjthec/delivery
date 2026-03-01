@@ -9,9 +9,10 @@ interface Props {
   notifications: AdminNotification[];
   onReadNotifications: () => void;
   onClearNotifications: () => void;
+  onOpenProfile: () => void;
 }
 
-const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode, notifications, onReadNotifications, onClearNotifications }) => {
+const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode, notifications, onReadNotifications, onClearNotifications, onOpenProfile }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -152,7 +153,7 @@ const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode, notifications, 
                     </span>
                   </button>
 
-                  <button className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all text-zinc-500 hover:text-orange-500 group">
+                  <button onClick={() => { onOpenProfile(); setIsMenuOpen(false); }} className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all text-zinc-500 hover:text-orange-500 group">
                     <User size={18} className="group-hover:scale-110 transition-transform" />
                     <span className="text-xs font-black uppercase tracking-widest">Meu Perfil</span>
                   </button>
