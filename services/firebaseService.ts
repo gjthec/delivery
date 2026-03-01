@@ -1,7 +1,7 @@
 
 import { IS_FIREBASE_ON } from '../constants';
 import { db } from '../firebaseConfig';
-import { collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import {
   AdminNotification,
   AppNotification,
@@ -88,6 +88,12 @@ function normalizeAdminNotification(id: string, raw: Record<string, unknown>): A
 export interface FirebaseOrder {
   id: string;
   customerName: string;
+  customerPhone?: string;
+  customer?: {
+    name: string;
+    phone: string;
+    address: CheckoutDetails['address'];
+  };
   items: {
     menuItem: MenuItem;
     quantity: number;
@@ -100,10 +106,19 @@ export interface FirebaseOrder {
     method: CheckoutDetails['payment']['type'];
     brand?: CheckoutDetails['payment']['brand'];
     changeFor?: CheckoutDetails['payment']['changeFor'];
+    total?: number;
   };
   address: CheckoutDetails['address'];
   status: OrderStatus;
   createdAt: string;
+}
+
+function normalizePhone(phone: string): string {
+  return phone.replace(/\D/g, '');
+}
+
+function toFirestorePhoneDocId(phone: string): string {
+  return normalizePhone(phone);
 }
 
 export interface FirebaseCoupon {
@@ -146,6 +161,15 @@ export function toFirebaseOrder(params: {
   return {
     id,
     customerName,
+    customerPhone: details.customer?.phone,
+    customer: details.customer ? {
+      name: details.customer.name,
+      phone: details.customer.phone,
+      address: {
+        ...details.address,
+        ...(details.address.complement ? { complement: details.address.complement } : {})
+      }
+    } : undefined,
     items: items.map((ci) => ({
       menuItem: ci.item,
       quantity: ci.quantity,
@@ -157,7 +181,8 @@ export function toFirebaseOrder(params: {
     payment: {
       method: details.payment.type,
       ...(details.payment.brand ? { brand: details.payment.brand } : {}),
-      ...(details.payment.changeFor ? { changeFor: details.payment.changeFor } : {})
+      ...(details.payment.changeFor ? { changeFor: details.payment.changeFor } : {}),
+      total
     },
     address: {
       ...details.address,
@@ -166,6 +191,93 @@ export function toFirebaseOrder(params: {
     status: 'pending',
     createdAt: createdAt ?? new Date().toISOString()
   };
+}
+
+/**
+ * Busca pedidos anteriores pelo número de telefone.
+ */
+export async function fetchOrdersByPhone(phone: string): Promise<FirebaseOrder[] | null> {
+  if (!IS_FIREBASE_ON || !phone.trim()) return null;
+
+  const normalizedPhone = normalizePhone(phone);
+  const orderPaths: string[][] = [
+    ['orders'],
+    ['foodai', 'admin', 'orders']
+  ];
+
+  const mapOrders = (snapshot: Awaited<ReturnType<typeof getDocs>>) => snapshot.docs.map((docSnap) => ({
+    ...(docSnap.data() as FirebaseOrder),
+    id: docSnap.id
+  }));
+
+  try {
+    if (normalizedPhone) {
+      const userOrdersSnapshot = await getDocs(collection(db, 'foodai', 'user', normalizedPhone, 'profile', 'orders'));
+      if (!userOrdersSnapshot.empty) {
+        return userOrdersSnapshot.docs
+          .map((docSnap) => ({
+            ...(docSnap.data() as FirebaseOrder),
+            id: docSnap.id
+          }))
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      }
+    }
+
+    for (const pathParts of orderPaths) {
+      const ordersRef = collection(db, ...pathParts);
+      const queryByNestedPhone = query(ordersRef, where('customer.phone', '==', phone));
+      const queryBySimplePhone = query(ordersRef, where('customerPhone', '==', phone));
+
+      const [nestedSnapshot, simpleSnapshot] = await Promise.all([
+        getDocs(queryByNestedPhone),
+        getDocs(queryBySimplePhone)
+      ]);
+
+      const combined = [...mapOrders(nestedSnapshot), ...mapOrders(simpleSnapshot)];
+
+      if (combined.length > 0) {
+        const uniqueOrders = Array.from(new Map(combined.map((order) => [order.id, order])).values());
+
+        return uniqueOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      }
+    }
+
+    return [];
+  } catch (error) {
+    // fallback sem query composta (busca completa + filtro local)
+    console.warn('[Firebase] Fallback de busca por telefone ativado:', error);
+
+    try {
+      const matchedOrders: FirebaseOrder[] = [];
+
+      if (normalizedPhone) {
+        const userOrdersSnapshot = await getDocs(collection(db, 'foodai', 'user', normalizedPhone, 'profile', 'orders'));
+        userOrdersSnapshot.docs.forEach((docSnap) => {
+          matchedOrders.push({ ...(docSnap.data() as FirebaseOrder), id: docSnap.id });
+        });
+      }
+
+      for (const pathParts of orderPaths) {
+        const snapshot = await getDocs(collection(db, ...pathParts));
+
+        snapshot.docs.forEach((docSnap) => {
+          const order = { ...(docSnap.data() as FirebaseOrder), id: docSnap.id };
+          const orderPhones = [order.customer?.phone, order.customerPhone]
+            .filter((value): value is string => Boolean(value))
+            .map(normalizePhone);
+
+          if (orderPhones.includes(normalizedPhone)) {
+            matchedOrders.push(order);
+          }
+        });
+      }
+
+      return matchedOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    } catch (fallbackError) {
+      console.error('[Firebase] Erro ao buscar pedidos por telefone:', fallbackError);
+      return null;
+    }
+  }
 }
 
 /**
@@ -186,6 +298,30 @@ export async function saveOrderToFirebase(orderData: FirebaseOrder): Promise<boo
       ...orderData,
       serverTimestamp: serverTimestamp()
     }));
+
+    const customerPhone = orderData.customer?.phone || orderData.customerPhone;
+    const userPhoneDocId = customerPhone ? toFirestorePhoneDocId(customerPhone) : '';
+
+    if (userPhoneDocId) {
+      const userProfileRef = doc(db, 'foodai', 'user', userPhoneDocId, 'profile');
+      const userOrdersRef = collection(db, 'foodai', 'user', userPhoneDocId, 'profile', 'orders');
+      const userOrderRef = doc(userOrdersRef, orderData.id);
+
+      await Promise.all([
+        setDoc(userProfileRef, removeUndefinedDeep({
+          phone: customerPhone,
+          normalizedPhone: userPhoneDocId,
+          name: orderData.customer?.name || orderData.customerName,
+          lastAddress: orderData.customer?.address || orderData.address,
+          updatedAt: new Date().toISOString(),
+          serverTimestamp: serverTimestamp()
+        }), { merge: true }),
+        setDoc(userOrderRef, removeUndefinedDeep({
+          ...orderData,
+          serverTimestamp: serverTimestamp()
+        }))
+      ]);
+    }
 
     const notificationsRef = collection(db, 'foodai', 'admin', 'notifications');
     const notificationData = buildPendingOrderNotification(orderData.id);

@@ -72,6 +72,10 @@ export interface Address {
 }
 
 export interface CheckoutDetails {
+  customer: {
+    name: string;
+    phone: string;
+  };
   payment: {
     type: PaymentType;
     brand?: CardBrand;
