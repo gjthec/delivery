@@ -117,6 +117,10 @@ function normalizePhone(phone: string): string {
   return phone.replace(/\D/g, '');
 }
 
+function toFirestorePhoneDocId(phone: string): string {
+  return normalizePhone(phone);
+}
+
 export interface FirebaseCoupon {
   id: string;
   code: string;
@@ -207,6 +211,18 @@ export async function fetchOrdersByPhone(phone: string): Promise<FirebaseOrder[]
   }));
 
   try {
+    if (normalizedPhone) {
+      const userOrdersSnapshot = await getDocs(collection(db, 'foodai', 'user', normalizedPhone, 'orders'));
+      if (!userOrdersSnapshot.empty) {
+        return userOrdersSnapshot.docs
+          .map((docSnap) => ({
+            ...(docSnap.data() as FirebaseOrder),
+            id: docSnap.id
+          }))
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      }
+    }
+
     for (const pathParts of orderPaths) {
       const ordersRef = collection(db, ...pathParts);
       const queryByNestedPhone = query(ordersRef, where('customer.phone', '==', phone));
@@ -233,6 +249,13 @@ export async function fetchOrdersByPhone(phone: string): Promise<FirebaseOrder[]
 
     try {
       const matchedOrders: FirebaseOrder[] = [];
+
+      if (normalizedPhone) {
+        const userOrdersSnapshot = await getDocs(collection(db, 'foodai', 'user', normalizedPhone, 'orders'));
+        userOrdersSnapshot.docs.forEach((docSnap) => {
+          matchedOrders.push({ ...(docSnap.data() as FirebaseOrder), id: docSnap.id });
+        });
+      }
 
       for (const pathParts of orderPaths) {
         const snapshot = await getDocs(collection(db, ...pathParts));
@@ -275,6 +298,30 @@ export async function saveOrderToFirebase(orderData: FirebaseOrder): Promise<boo
       ...orderData,
       serverTimestamp: serverTimestamp()
     }));
+
+    const customerPhone = orderData.customer?.phone || orderData.customerPhone;
+    const userPhoneDocId = customerPhone ? toFirestorePhoneDocId(customerPhone) : '';
+
+    if (userPhoneDocId) {
+      const userProfileRef = doc(db, 'foodai', 'user', userPhoneDocId, 'profile');
+      const userOrdersRef = collection(db, 'foodai', 'user', userPhoneDocId, 'orders');
+      const userOrderRef = doc(userOrdersRef, orderData.id);
+
+      await Promise.all([
+        setDoc(userProfileRef, removeUndefinedDeep({
+          phone: customerPhone,
+          normalizedPhone: userPhoneDocId,
+          name: orderData.customer?.name || orderData.customerName,
+          lastAddress: orderData.customer?.address || orderData.address,
+          updatedAt: new Date().toISOString(),
+          serverTimestamp: serverTimestamp()
+        }), { merge: true }),
+        setDoc(userOrderRef, removeUndefinedDeep({
+          ...orderData,
+          serverTimestamp: serverTimestamp()
+        }))
+      ]);
+    }
 
     const notificationsRef = collection(db, 'foodai', 'admin', 'notifications');
     const notificationData = buildPendingOrderNotification(orderData.id);
