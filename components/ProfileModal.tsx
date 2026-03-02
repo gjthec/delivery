@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, ShoppingBag, User, X } from 'lucide-react';
-import { FirebaseOrder, fetchOrdersByPhone } from '../services/firebaseService';
+import { Loader2, User, X } from 'lucide-react';
+import { fetchOrdersByPhone } from '../services/firebaseService';
 import { Address } from '../types';
 
 interface Props {
@@ -12,8 +12,6 @@ const ProfileModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [phone, setPhone] = useState(() => localStorage.getItem('foodai-customer-phone') || '');
   const [name, setName] = useState(() => localStorage.getItem('foodai-customer-name') || '');
   const [isLoading, setIsLoading] = useState(false);
-  const [orders, setOrders] = useState<FirebaseOrder[]>([]);
-  const [hasSearched, setHasSearched] = useState(false);
 
   useEffect(() => {
     if (isOpen && phone) {
@@ -25,14 +23,11 @@ const ProfileModal: React.FC<Props> = ({ isOpen, onClose }) => {
     if (!phone.trim()) return;
 
     setIsLoading(true);
-    setHasSearched(true);
     localStorage.setItem('foodai-customer-phone', phone);
 
     const fetchedOrders = await fetchOrdersByPhone(phone);
 
     if (fetchedOrders && fetchedOrders.length > 0) {
-      setOrders(fetchedOrders);
-
       const latestOrder = fetchedOrders[0];
       if (!name && latestOrder.customer?.name) {
         setName(latestOrder.customer.name);
@@ -62,8 +57,6 @@ const ProfileModal: React.FC<Props> = ({ isOpen, onClose }) => {
       if (addressesUpdated) {
         localStorage.setItem('foodai-addresses', JSON.stringify(savedAddresses));
       }
-    } else {
-      setOrders([]);
     }
 
     setIsLoading(false);
@@ -89,7 +82,7 @@ const ProfileModal: React.FC<Props> = ({ isOpen, onClose }) => {
             </div>
             <div>
               <h2 className="text-2xl font-black tracking-tighter">Meu Perfil</h2>
-              <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Histórico e Dados</p>
+              <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Dados Pessoais</p>
             </div>
           </div>
           <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-full bg-zinc-50 dark:bg-zinc-900 text-zinc-400 hover:text-orange-500 transition-all">
@@ -142,57 +135,6 @@ const ProfileModal: React.FC<Props> = ({ isOpen, onClose }) => {
             </div>
           </div>
 
-          {hasSearched && (
-            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-400 px-2 flex items-center gap-2">
-                <ShoppingBag size={14} />
-                Últimos Pedidos
-              </h3>
-
-              {orders.length === 0 ? (
-                <div className="p-8 text-center border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-[2rem]">
-                  <p className="text-sm font-bold text-zinc-400">Nenhum pedido encontrado para este número.</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {orders.map((order, idx) => (
-                    <div key={order.id || idx} className="p-5 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-[2rem] shadow-sm">
-                      <div className="flex justify-between items-start mb-4">
-                        <div>
-                          <p className="text-xs font-black text-zinc-900 dark:text-zinc-100">
-                            {new Date(order.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
-                          </p>
-                          <p className="text-[10px] font-bold text-zinc-400 uppercase mt-0.5">
-                            {new Date(order.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                        </div>
-                        <div className="px-3 py-1 bg-orange-50 dark:bg-orange-500/10 text-orange-600 rounded-lg text-[9px] font-black uppercase tracking-widest">
-                          {order.status === 'pending' ? 'Pendente' : order.status}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2 mb-4">
-                        {order.items.map((item, itemIndex) => (
-                          <div key={itemIndex} className="flex justify-between items-center text-sm">
-                            <span className="font-medium text-zinc-600 dark:text-zinc-300">
-                              <span className="font-black text-zinc-900 dark:text-zinc-100 mr-2">{item.quantity}x</span>
-                              {item.menuItem.name}
-                            </span>
-                            <span className="font-black text-zinc-900 dark:text-zinc-100">R$ {(item.menuItem.price * item.quantity).toFixed(2)}</span>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 flex justify-between items-center">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Total</span>
-                        <span className="text-lg font-black text-orange-500">R$ {order.total.toFixed(2)}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </div>
     </div>

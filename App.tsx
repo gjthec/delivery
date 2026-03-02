@@ -8,6 +8,7 @@ import PixPaymentModal from './components/PixPaymentModal';
 import CategoryIcon from './components/CategoryIcon';
 import ItemDetailModal from './components/ItemDetailModal';
 import ProfileModal from './components/ProfileModal';
+import OrdersModal from './components/OrdersModal';
 import { MENU_ITEMS, CATEGORIES, IS_FIREBASE_ON } from './constants';
 import { AdminNotification, MenuItem, FilterType, CartItem, ExtraItem, CheckoutDetails, Category } from './types';
 import { askWaiter } from './services/geminiService';
@@ -44,6 +45,7 @@ const App: React.FC = () => {
   const [isCartJiggling, setIsCartJiggling] = useState(false);
   const [isPixModalOpen, setIsPixModalOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isOrdersOpen, setIsOrdersOpen] = useState(false);
   const [currentTotal, setCurrentTotal] = useState(0);
   const [checkoutSession, setCheckoutSession] = useState<CheckoutSession | null>(null);
   
@@ -104,12 +106,12 @@ const App: React.FC = () => {
   }, [darkMode]);
 
   useEffect(() => {
-    if (isCartOpen || isPixModalOpen || isDetailModalOpen || isProfileOpen) {
+    if (isCartOpen || isPixModalOpen || isDetailModalOpen || isProfileOpen || isOrdersOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'unset';
     }
-  }, [isCartOpen, isPixModalOpen, isDetailModalOpen, isProfileOpen]);
+  }, [isCartOpen, isPixModalOpen, isDetailModalOpen, isProfileOpen, isOrdersOpen]);
 
 
   useEffect(() => {
@@ -353,12 +355,18 @@ const App: React.FC = () => {
           onReadNotifications={markNotificationsAsRead}
           onClearNotifications={clearNotifications}
           onOpenProfile={() => setIsProfileOpen(true)}
+          onOpenOrders={() => setIsOrdersOpen(true)}
         />
       </div>
       
       <ProfileModal
         isOpen={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}
+      />
+
+      <OrdersModal
+        isOpen={isOrdersOpen}
+        onClose={() => setIsOrdersOpen(false)}
       />
 
       <CartDrawer 

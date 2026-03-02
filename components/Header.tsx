@@ -10,9 +10,10 @@ interface Props {
   onReadNotifications: () => void;
   onClearNotifications: () => void;
   onOpenProfile: () => void;
+  onOpenOrders: () => void;
 }
 
-const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode, notifications, onReadNotifications, onClearNotifications, onOpenProfile }) => {
+const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode, notifications, onReadNotifications, onClearNotifications, onOpenProfile, onOpenOrders }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -157,7 +158,7 @@ const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode, notifications, 
                     <User size={18} className="group-hover:scale-110 transition-transform" />
                     <span className="text-xs font-black uppercase tracking-widest">Meu Perfil</span>
                   </button>
-                  <button className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all text-zinc-500 hover:text-orange-500 group">
+                  <button onClick={() => { onOpenOrders(); setIsMenuOpen(false); }} className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all text-zinc-500 hover:text-orange-500 group">
                     <ShoppingBag size={18} className="group-hover:scale-110 transition-transform" />
                     <span className="text-xs font-black uppercase tracking-widest">Meus Pedidos</span>
                   </button>
