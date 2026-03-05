@@ -146,11 +146,11 @@ export function toFirebaseOrder(params: {
 
   return {
     id,
-    customerName,
-    customerPhone: details.customer?.phone,
+    customerName: customerName || 'Cliente FoodAI',
+    customerPhone: details.customer?.phone || '',
     customer: details.customer ? {
-      name: details.customer.name,
-      phone: details.customer.phone,
+      name: details.customer.name || 'Cliente FoodAI',
+      phone: details.customer.phone || '',
       address: {
         ...details.address,
         ...(details.address.complement ? { complement: details.address.complement } : {})
@@ -161,7 +161,7 @@ export function toFirebaseOrder(params: {
       quantity: ci.quantity,
       removedIngredients: ci.removedIngredients,
       selectedExtras: ci.selectedExtras,
-      observations: ci.observations
+      observations: ci.observations || ''
     })),
     total,
     payment: {
