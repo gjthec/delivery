@@ -1,4 +1,9 @@
 export function getTenantId(): string {
+  const envTenant = import.meta.env.VITE_TENANT_ID as string | undefined;
+  if (envTenant?.trim()) {
+    return envTenant.trim();
+  }
+
   // SSR/ambientes sem window: manter tenant padrão local.
   if (typeof window === 'undefined') return 'localhost';
 
