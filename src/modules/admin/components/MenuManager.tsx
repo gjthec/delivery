@@ -9,7 +9,7 @@ import {
   TicketPercent, AlertTriangle, Bike
 } from 'lucide-react';
 import { INITIAL_CATEGORIES } from '../mockData';
-import PizzaConfiguratorModal from '../pizza/PizzaConfiguratorModal';
+import PizzaConfiguratorContent from '../pizza/PizzaConfiguratorContent';
 
 type SortOption = 'category' | 'price-asc' | 'price-desc' | 'name';
 
@@ -44,10 +44,12 @@ const MenuManager: React.FC = () => {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isPizzaConfiguratorOpen, setIsPizzaConfiguratorOpen] = useState(false);
   const [editingPizzaBase, setEditingPizzaBase] = useState<MenuItem | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newItemType, setNewItemType] = useState<'normal' | 'pizza'>('normal');
+  const [dirtyNormal, setDirtyNormal] = useState(false);
+  const [dirtyPizza, setDirtyPizza] = useState(false);
+  const [normalBaseline, setNormalBaseline] = useState('');
   const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
   
   // States para painel de gerenciamento global
@@ -103,6 +105,14 @@ const MenuManager: React.FC = () => {
     setConfirmModal(null);
   };
 
+
+  const getNormalSnapshot = (data = formData) => JSON.stringify(data);
+
+  useEffect(() => {
+    if (!isModalOpen || newItemType !== 'normal' || !normalBaseline) return;
+    setDirtyNormal(getNormalSnapshot() !== normalBaseline);
+  }, [formData, isModalOpen, newItemType, normalBaseline]);
+
   useEffect(() => {
     const loadInitialData = async () => {
       const menuData = await loadMenu();
@@ -126,14 +136,6 @@ const MenuManager: React.FC = () => {
   }, [categories]);
 
 
-  useEffect(() => {
-    if (!isModalOpen || editingId) return;
-    if (newItemType !== 'pizza') return;
-
-    setIsModalOpen(false);
-    setEditingPizzaBase(null);
-    setIsPizzaConfiguratorOpen(true);
-  }, [isModalOpen, editingId, newItemType]);
 
   const uniqueSorted = (values: string[]) => Array.from(
     new Map(values.map(value => [value.trim().toLowerCase(), value.trim()])).values()
@@ -283,10 +285,14 @@ const MenuManager: React.FC = () => {
   const handleEdit = (item: MenuItem) => {
     if (item.type === 'pizza') {
       setEditingPizzaBase(item);
-      setIsPizzaConfiguratorOpen(true);
+      setNewItemType('pizza');
+      setEditingId(item.id);
+      setIsModalOpen(true);
       return;
     }
 
+    setEditingPizzaBase(null);
+    setNewItemType('normal');
     setFormData({
       name: item.name,
       category: item.category,
@@ -304,7 +310,24 @@ const MenuManager: React.FC = () => {
       sizes: item.sizes || []
     });
     setEditingId(item.id);
-    setWizardStep(item.type === 'pizza' ? 1 : 1);
+    setWizardStep(1);
+    setNormalBaseline(getNormalSnapshot({
+      name: item.name,
+      category: item.category,
+      price: item.price.toString(),
+      costPrice: item.costPrice?.toString() || '',
+      originalPrice: item.originalPrice?.toString() || '',
+      description: item.description,
+      imageUrl: item.imageUrl,
+      size: item.size,
+      tags: [...item.tags],
+      ingredients: [...item.ingredients],
+      extras: [...item.extras],
+      type: item.type || 'regular',
+      pricingStrategy: item.pricingStrategy || 'highestFlavor',
+      sizes: item.sizes || []
+    }));
+    setDirtyNormal(false);
     setIsModalOpen(true);
   };
 
@@ -393,8 +416,58 @@ const MenuManager: React.FC = () => {
     setEditingId(null);
     setNewItemType('normal');
     setWizardStep(1);
+    setEditingPizzaBase(null);
+    setDirtyNormal(false);
+    setDirtyPizza(false);
+    setNormalBaseline('');
     setIsAddingCategory(false);
     setNewCategoryName('');
+  };
+
+  const resetNormalFlow = () => {
+    setFormData({
+      name: '',
+      category: categories[0] || 'Burgers',
+      price: '',
+      costPrice: '',
+      originalPrice: '',
+      description: '',
+      imageUrl: '',
+      size: 'M',
+      tags: [],
+      ingredients: [],
+      extras: [],
+      type: 'regular',
+      pricingStrategy: 'highestFlavor',
+      sizes: []
+    });
+    setEditingId(null);
+    setDirtyNormal(false);
+    setNormalBaseline('');
+  };
+
+  const resetPizzaFlow = () => {
+    setEditingPizzaBase(null);
+    setDirtyPizza(false);
+  };
+
+  const handleTypeSwitch = async (targetType: 'normal' | 'pizza') => {
+    if (targetType === newItemType) return;
+
+    const hasUnsavedChanges = newItemType === 'normal' ? dirtyNormal : dirtyPizza;
+    if (hasUnsavedChanges) {
+      const confirmed = await openConfirm({
+        title: 'Descartar alterações?',
+        message: 'Você tem alterações não salvas. Ao trocar o tipo, elas serão perdidas.',
+        confirmLabel: 'Trocar tipo'
+      });
+      if (!confirmed) return;
+    }
+
+    if (newItemType === 'normal') resetNormalFlow();
+    if (newItemType === 'pizza') resetPizzaFlow();
+
+    setNewItemType(targetType);
   };
 
   const handleAddCategory = async () => {
@@ -889,7 +962,7 @@ const MenuManager: React.FC = () => {
                 <Settings size={18} /> <span className="hidden sm:inline">Global</span>
              </button>
              <button 
-               onClick={() => { resetForm(); setNewItemType('normal'); setIsModalOpen(true); }} 
+               onClick={() => { resetForm(); setNewItemType('normal'); setFormData((p) => ({ ...p, type: 'regular' })); setNormalBaseline(getNormalSnapshot({ ...formData, name: '', category: categories[0] || 'Burgers', price: '', costPrice: '', originalPrice: '', description: '', imageUrl: '', size: 'M', tags: [], ingredients: [], extras: [], type: 'regular', pricingStrategy: 'highestFlavor', sizes: [] })); setIsModalOpen(true); }} 
                className="flex-1 xl:flex-initial flex items-center justify-center gap-2 bg-orange-500 text-white px-6 py-3 rounded-2xl font-black uppercase text-[10px] shadow-lg shadow-orange-500/20 hover:scale-105 active:scale-95 transition-all whitespace-nowrap"
              >
                <Plus size={18} /> <span className="inline">Novo</span>
@@ -958,18 +1031,6 @@ const MenuManager: React.FC = () => {
         </div>
       )}
 
-
-      <PizzaConfiguratorModal
-        open={isPizzaConfiguratorOpen}
-        onClose={() => setIsPizzaConfiguratorOpen(false)}
-        pizzaBase={editingPizzaBase}
-        categories={categories}
-        onSaved={async () => {
-          const menuData = await loadMenu();
-          await loadCatalogs(menuData);
-        }}
-      />
-
       {/* MODAL PRINCIPAL (NOVO/EDITAR) */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-stone-950/90 backdrop-blur-xl z-[200] flex items-center justify-center p-2 sm:p-4">
@@ -982,20 +1043,18 @@ const MenuManager: React.FC = () => {
                   <h2 className="text-xl lg:text-2xl font-black uppercase tracking-tight text-stone-800 dark:text-white">{editingId ? 'Ficha Técnica do Prato' : 'Novo Item'}</h2>
                   <p className="text-sm text-stone-400 font-medium">{editingId ? 'Editando prato existente' : 'Escolha o tipo do item para começar.'}</p>
                 </div>
-                <button onClick={() => setIsModalOpen(false)} className="p-2 lg:p-3 bg-stone-100 dark:bg-stone-800 rounded-2xl text-stone-400 hover:text-red-500 transition-all"><X size={20} className="lg:w-6 lg:h-6"/></button>
+                <button onClick={() => { setIsModalOpen(false); resetForm(); }} className="p-2 lg:p-3 bg-stone-100 dark:bg-stone-800 rounded-2xl text-stone-400 hover:text-red-500 transition-all"><X size={20} className="lg:w-6 lg:h-6"/></button>
               </div>
 
               {/* Scrollable Content: Apenas o formulário rola */}
               <div className="flex-1 overflow-y-auto custom-scrollbar p-6 lg:px-12 space-y-10">
-                {!editingId && (
-                  <div className="rounded-2xl border border-stone-200 dark:border-stone-700 p-3">
+                <div className="rounded-2xl border border-stone-200 dark:border-stone-700 p-3 sticky top-0 z-20 bg-white dark:bg-stone-900">
                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-400 mb-2">Tipo do item</p>
                     <div className="flex gap-2">
-                      <button onClick={() => setNewItemType('normal')} className={`px-4 py-2 rounded-xl text-xs font-black uppercase border ${newItemType === 'normal' ? 'bg-orange-500 text-white border-orange-500' : 'border-stone-200 text-stone-500'}`}>Normal</button>
-                      <button onClick={() => setNewItemType('pizza')} className={`px-4 py-2 rounded-xl text-xs font-black uppercase border ${newItemType === 'pizza' ? 'bg-stone-900 text-white border-stone-900' : 'border-stone-200 text-stone-500'}`}>Pizza</button>
+                      <button onClick={() => handleTypeSwitch('normal')} className={`px-4 py-2 rounded-xl text-xs font-black uppercase border ${newItemType === 'normal' ? 'bg-orange-500 text-white border-orange-500' : 'border-stone-200 text-stone-500'}`}>Normal</button>
+                      <button onClick={() => handleTypeSwitch('pizza')} className={`px-4 py-2 rounded-xl text-xs font-black uppercase border ${newItemType === 'pizza' ? 'bg-stone-900 text-white border-stone-900' : 'border-stone-200 text-stone-500'}`}>Pizza</button>
                     </div>
                   </div>
-                )}
 
                 {formData.type === 'pizza' && (
                   <div className="rounded-3xl border border-orange-100 dark:border-orange-900/30 p-4 space-y-3">
@@ -1013,6 +1072,19 @@ const MenuManager: React.FC = () => {
                   </div>
                 )}
 
+                {newItemType === 'pizza' ? (
+                  <PizzaConfiguratorContent
+                    pizzaBase={editingPizzaBase}
+                    categories={categories}
+                    onSaved={async () => {
+                      const menuData = await loadMenu();
+                      await loadCatalogs(menuData);
+                      setIsModalOpen(false);
+                      resetForm();
+                    }}
+                    onDirtyChange={setDirtyPizza}
+                  />
+                ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
                   {/* Coluna 1: Básico e Descrição */}
                   <div className="space-y-8">
@@ -1275,15 +1347,18 @@ const MenuManager: React.FC = () => {
                     </div>
                   </div>
                 </div>
+                )}
               </div>
 
               {/* Footer: Fixo no fundo */}
+              {newItemType === 'normal' && (
               <div className="flex flex-col sm:flex-row gap-4 p-6 lg:p-12 lg:pt-6 border-t border-stone-100 dark:border-stone-800 bg-white dark:bg-stone-900 shrink-0 z-10">
                  <button onClick={() => setIsModalOpen(false)} className="w-full sm:flex-1 py-4 sm:py-5 bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 rounded-3xl font-black uppercase tracking-widest text-[10px]">Descartar Alterações</button>
                  <button onClick={handleSave} className="w-full sm:flex-[2] py-4 sm:py-5 bg-orange-500 text-white rounded-3xl font-black uppercase tracking-widest text-[10px] shadow-2xl shadow-orange-500/20 hover:scale-[1.02] active:scale-95 transition-all">
                    {editingId ? 'Confirmar Atualização' : 'Salvar Novo Prato no Cardápio'}
                  </button>
               </div>
+              )}
            </div>
         </div>
       )}

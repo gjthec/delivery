@@ -1,14 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Check, ChevronRight, Pizza, Plus, Trash2, X } from 'lucide-react';
+import { Check, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import { MenuItem, PizzaFlavor, Ingredient, PizzaPricingStrategy, PizzaSizeOption } from '../types';
 import { dbMenu, dbPizzaFlavors, dbIngredientsCatalog } from '../services/dbService';
 
 interface Props {
-  open: boolean;
-  onClose: () => void;
   pizzaBase?: MenuItem | null;
   categories: string[];
   onSaved: () => Promise<void> | void;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 type StepId = 0 | 1 | 2;
@@ -26,7 +25,7 @@ function removeUndefinedDeep<T>(value: T): T {
 
 const defaultSize = (): PizzaSizeOption => ({ id: `SIZE-${Date.now()}`, label: 'Média', basePrice: 0, maxFlavors: 2, slices: null });
 
-const PizzaConfiguratorModal: React.FC<Props> = ({ open, onClose, pizzaBase, categories, onSaved }) => {
+const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories, onSaved, onDirtyChange }) => {
   const [step, setStep] = useState<StepId>(0);
   const [isSaving, setIsSaving] = useState(false);
   const [name, setName] = useState('');
@@ -42,6 +41,7 @@ const PizzaConfiguratorModal: React.FC<Props> = ({ open, onClose, pizzaBase, cat
   const [selectedFlavor, setSelectedFlavor] = useState<PizzaFlavor | null>(null);
   const [ingredientSearch, setIngredientSearch] = useState('');
   const [confirmRemoveIndex, setConfirmRemoveIndex] = useState<number | null>(null);
+  const [initialSnapshot, setInitialSnapshot] = useState('');
 
   const loadCatalogs = async () => {
     const [flavorsData, ingredientsData] = await Promise.all([
@@ -53,20 +53,30 @@ const PizzaConfiguratorModal: React.FC<Props> = ({ open, onClose, pizzaBase, cat
   };
 
   useEffect(() => {
-    if (!open) return;
+
+    const baseSnapshot = {
+      name: pizzaBase?.name || 'Pizza da Casa',
+      category: pizzaBase?.category || categories[0] || 'Pizzas',
+      description: pizzaBase?.description || '',
+      imageUrl: pizzaBase?.imageUrl || '',
+      pricingStrategy: (pizzaBase?.pricingStrategy as PizzaPricingStrategy) || 'highestFlavor',
+      sizes: pizzaBase?.sizes?.length ? pizzaBase.sizes : [defaultSize()],
+      selectedFlavor: null
+    };
 
     setStep(0);
-    setName(pizzaBase?.name || 'Pizza da Casa');
-    setCategory(pizzaBase?.category || categories[0] || 'Pizzas');
-    setDescription(pizzaBase?.description || '');
-    setImageUrl(pizzaBase?.imageUrl || '');
-    setPricingStrategy((pizzaBase?.pricingStrategy as PizzaPricingStrategy) || 'highestFlavor');
-    setSizes(pizzaBase?.sizes?.length ? pizzaBase.sizes : [defaultSize()]);
+    setName(baseSnapshot.name);
+    setCategory(baseSnapshot.category);
+    setDescription(baseSnapshot.description);
+    setImageUrl(baseSnapshot.imageUrl);
+    setPricingStrategy(baseSnapshot.pricingStrategy);
+    setSizes(baseSnapshot.sizes);
     setSelectedFlavor(null);
     setFlavorSearch('');
     setIngredientSearch('');
+    setInitialSnapshot(JSON.stringify(baseSnapshot));
     loadCatalogs();
-  }, [open, pizzaBase, categories]);
+  }, [pizzaBase, categories]);
 
   const filteredFlavors = useMemo(() => {
     const q = flavorSearch.trim().toLowerCase();
@@ -76,6 +86,13 @@ const PizzaConfiguratorModal: React.FC<Props> = ({ open, onClose, pizzaBase, cat
 
   const previewSize = sizes[0];
   const canAdvanceStep1 = sizes.length > 0 && sizes.every((s) => s.label.trim() && s.basePrice >= 0 && s.maxFlavors >= 1);
+
+  useEffect(() => {
+    if (!initialSnapshot) return;
+    const snapshot = JSON.stringify({ name, category, description, imageUrl, pricingStrategy, sizes, selectedFlavor });
+    onDirtyChange?.(snapshot !== initialSnapshot);
+  }, [name, category, description, imageUrl, pricingStrategy, sizes, selectedFlavor, initialSnapshot, onDirtyChange]);
+
 
   const persistFlavor = async () => {
     if (!selectedFlavor?.name?.trim()) return;
@@ -149,27 +166,14 @@ const PizzaConfiguratorModal: React.FC<Props> = ({ open, onClose, pizzaBase, cat
 
       await dbMenu.save(payload);
       await onSaved();
-      onClose();
     } finally {
       setIsSaving(false);
     }
   };
 
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-[230] bg-stone-950/90 backdrop-blur-xl flex items-center justify-center p-2 sm:p-4">
-      <div className="w-full max-w-7xl max-h-[94vh] bg-white dark:bg-stone-900 rounded-[2rem] border border-stone-200 dark:border-stone-800 overflow-hidden flex flex-col">
-        <div className="px-6 py-5 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-500 flex items-center gap-2"><Pizza size={14} /> Configurador de Pizza</p>
-            <h2 className="text-2xl font-black tracking-tight text-stone-900 dark:text-white">{pizzaBase ? 'Editar Pizza Base' : 'Nova Pizza Base'}</h2>
-            <p className="text-xs text-stone-500 font-semibold">Defina tamanhos, preço base e máximo de sabores por tamanho. Preview ao vivo abaixo.</p>
-          </div>
-          <button onClick={onClose} className="p-3 rounded-2xl bg-stone-100 dark:bg-stone-800 text-stone-500"><X size={18} /></button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-6">
+    <div className="flex flex-col min-h-0">
+      <div className="flex-1 overflow-y-auto p-6 lg:px-12 grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-6">
           <div className="space-y-5">
             <div className="flex gap-2 flex-wrap">
               {['Tamanhos', 'Preço', 'Sabores'].map((label, index) => (
@@ -275,7 +279,7 @@ const PizzaConfiguratorModal: React.FC<Props> = ({ open, onClose, pizzaBase, cat
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-stone-100 dark:border-stone-800 flex items-center justify-between gap-3">
+        <div className="px-6 lg:px-12 py-4 border-t border-stone-100 dark:border-stone-800 flex items-center justify-between gap-3 bg-white dark:bg-stone-900">
           <button onClick={() => setStep((s) => Math.max(0, s - 1) as StepId)} className="px-4 py-3 rounded-2xl bg-stone-100 dark:bg-stone-800 text-xs font-black uppercase">Voltar</button>
           <div className="flex items-center gap-2">
             {step < 2 ? (
@@ -289,10 +293,9 @@ const PizzaConfiguratorModal: React.FC<Props> = ({ open, onClose, pizzaBase, cat
             )}
           </div>
         </div>
-      </div>
 
       {confirmRemoveIndex !== null && (
-        <div className="fixed inset-0 z-[240] bg-black/60 flex items-center justify-center p-4">
+        <div className="absolute inset-0 z-20 bg-black/60 flex items-center justify-center p-4">
           <div className="w-full max-w-sm rounded-3xl bg-white dark:bg-stone-900 border border-stone-200 p-5 space-y-4">
             <h4 className="font-black">Remover tamanho</h4>
             <p className="text-sm text-stone-500">Deseja remover este tamanho da pizza?</p>
@@ -307,4 +310,4 @@ const PizzaConfiguratorModal: React.FC<Props> = ({ open, onClose, pizzaBase, cat
   );
 };
 
-export default PizzaConfiguratorModal;
+export default PizzaConfiguratorContent;
