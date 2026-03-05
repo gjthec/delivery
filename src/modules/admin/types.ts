@@ -2,12 +2,43 @@
 export type OrderStatus = 'pending' | 'preparing' | 'shipping' | 'completed' | 'cancelled';
 
 export interface ExtraItem {
+  type?: 'regular' | 'pizza';
   name: string;
   price: number;
 }
 
+export type PizzaPricingStrategy = 'highestFlavor' | 'averageFlavor' | 'fixedBySize';
+
+export interface PizzaSizeOption {
+  id: string;
+  label: string;
+  basePrice: number;
+  maxFlavors: number;
+  slices?: number | null;
+}
+
+export interface Ingredient {
+  id: string;
+  name: string;
+  active: boolean;
+  tags: string[];
+  allergens?: string[] | null;
+}
+
+export interface PizzaFlavor {
+  id: string;
+  name: string;
+  description?: string | null;
+  imageUrl?: string | null;
+  tags: string[];
+  ingredients: Array<{ id: string; name: string }>;
+  active: boolean;
+  priceDeltaBySize?: Record<string, number> | null;
+}
+
 export interface MenuItem {
   id: string;
+  type?: 'regular' | 'pizza';
   name: string;
   category: string;
   price: number;
@@ -22,6 +53,8 @@ export interface MenuItem {
   calories?: number;
   ingredients: string[];
   extras: ExtraItem[];
+  pricingStrategy?: PizzaPricingStrategy;
+  sizes?: PizzaSizeOption[];
 }
 
 export interface Category {

@@ -1,5 +1,5 @@
 import { IS_FIREBASE_ENABLED, firebaseConfig } from './config';
-import { MenuItem, Order, Combo, SalesInsights, SavedInsight, OrderStatus, AdminNotification, OrderNotificationEvent, Coupon, StoreSettings } from '../types';
+import { MenuItem, Order, Combo, SalesInsights, SavedInsight, OrderStatus, AdminNotification, OrderNotificationEvent, Coupon, StoreSettings, PizzaFlavor, Ingredient } from '../types';
 import { initializeApp } from 'firebase/app';
 import { tenantPathSegments } from '../../../firebase/firestore-paths';
 import {
@@ -109,7 +109,7 @@ export const dbMenu = {
     return getLocal(KEYS.MENU, []);
   },
   save: async (item: MenuItem): Promise<void> => {
-    const sanitized = sanitizeData(item);
+    const sanitized = sanitizeData({ ...item, tags: item.tags || [], ingredients: item.ingredients || [], active: item.active !== false, priceDeltaBySize: item.priceDeltaBySize || null });
     if (db) {
       try {
         await setDoc(doc(db, ...ROOT_PATH, 'menu', sanitized.id), sanitized);
@@ -851,5 +851,110 @@ export const dbGlobalSearch = {
       .map((item) => ({ id: item.id, label: item.name, type: 'produtos' as const, route: 'menu' }));
 
     return [...Array.from(customersMap.values()).slice(0, 5), ...orderResults, ...productResults];
+  }
+};
+
+
+export const dbPizzaFlavors = {
+  getAll: async (): Promise<PizzaFlavor[]> => {
+    const localKey = 'platform_pizza_flavors_v1';
+    if (db) {
+      try {
+        const snapshot = await getDocs(collection(db, ...ROOT_PATH, 'catalog', 'pizzaFlavors'));
+        const items: PizzaFlavor[] = [];
+        snapshot.forEach((docSnap) => {
+          const payload = docSnap.data() as PizzaFlavor;
+          items.push({ ...payload, id: docSnap.id, tags: Array.isArray(payload.tags) ? payload.tags : [], ingredients: Array.isArray(payload.ingredients) ? payload.ingredients.filter((ing) => ing && typeof ing === 'object' && String((ing as { id?: string }).id || '').trim() && String((ing as { name?: string }).name || '').trim()) as Array<{ id: string; name: string }> : [], active: typeof payload.active === 'boolean' ? payload.active : true, priceDeltaBySize: payload.priceDeltaBySize || null });
+        });
+        setLocal(localKey, items);
+        return items;
+      } catch (e) {
+        console.warn('Firestore error on pizza flavors, falling back to local:', e);
+      }
+    }
+
+    return getLocal(localKey, []);
+  },
+  save: async (item: PizzaFlavor): Promise<void> => {
+    const localKey = 'platform_pizza_flavors_v1';
+    const sanitized = sanitizeData({ ...item, tags: item.tags || [], ingredients: item.ingredients || [], active: item.active !== false, priceDeltaBySize: item.priceDeltaBySize || null });
+
+    if (db) {
+      try {
+        await setDoc(doc(db, ...ROOT_PATH, 'catalog', 'pizzaFlavors', sanitized.id), sanitized);
+      } catch (e) {
+        console.error('Error saving pizza flavor to Firestore:', e);
+      }
+    }
+
+    const current = getLocal<PizzaFlavor[]>(localKey, []);
+    const index = current.findIndex((i) => i.id === sanitized.id);
+    const updated = index >= 0
+      ? current.map((i) => (i.id === sanitized.id ? sanitized : i))
+      : [sanitized, ...current];
+    setLocal(localKey, updated);
+  },
+  delete: async (id: string): Promise<void> => {
+    const localKey = 'platform_pizza_flavors_v1';
+    if (db) {
+      try {
+        await deleteDoc(doc(db, ...ROOT_PATH, 'catalog', 'pizzaFlavors', id));
+      } catch (e) {
+        console.error('Error deleting pizza flavor from Firestore:', e);
+      }
+    }
+    const current = getLocal<PizzaFlavor[]>(localKey, []);
+    setLocal(localKey, current.filter((i) => i.id !== id));
+  }
+};
+
+
+export const dbIngredientsCatalog = {
+  getAll: async (): Promise<Ingredient[]> => {
+    const localKey = 'platform_catalog_ingredients_v1';
+    if (db) {
+      try {
+        const snapshot = await getDocs(collection(db, ...ROOT_PATH, 'catalog', 'ingredients'));
+        const items: Ingredient[] = snapshot.docs.map((docSnap) => {
+          const payload = docSnap.data() as Partial<Ingredient>;
+          return {
+            id: docSnap.id,
+            name: String(payload.name || '').trim(),
+            active: typeof payload.active === 'boolean' ? payload.active : true,
+            tags: Array.isArray(payload.tags) ? payload.tags.map(String).filter(Boolean) : [],
+            allergens: Array.isArray(payload.allergens) ? payload.allergens.map(String).filter(Boolean) : null
+          };
+        }).filter((item) => item.name);
+        setLocal(localKey, items);
+        return items;
+      } catch (error) {
+        console.warn('Firestore error on ingredient catalog, fallback local:', error);
+      }
+    }
+
+    return getLocal(localKey, []);
+  },
+  save: async (ingredient: Ingredient): Promise<void> => {
+    const localKey = 'platform_catalog_ingredients_v1';
+    const payload: Ingredient = {
+      id: ingredient.id,
+      name: ingredient.name,
+      active: ingredient.active !== false,
+      tags: ingredient.tags || [],
+      allergens: ingredient.allergens || null
+    };
+
+    if (db) {
+      try {
+        await setDoc(doc(db, ...ROOT_PATH, 'catalog', 'ingredients', payload.id), sanitizeData(payload));
+      } catch (error) {
+        console.error('Error saving ingredient catalog item:', error);
+      }
+    }
+
+    const current = getLocal<Ingredient[]>(localKey, []);
+    const idx = current.findIndex((item) => item.id === payload.id);
+    const updated = idx >= 0 ? current.map((item) => item.id === payload.id ? payload : item) : [payload, ...current];
+    setLocal(localKey, updated);
   }
 };

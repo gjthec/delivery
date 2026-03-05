@@ -11,6 +11,7 @@ import {
   MenuItem,
   NotificationPayload,
   NotificationType,
+  OrderItemPizza,
   OrderStatus
 } from '../types';
 import { createTenantOrder, getTenantOrdersByPhone } from './order.service';
@@ -86,6 +87,9 @@ export interface FirebaseOrder {
     removedIngredients: string[];
     selectedExtras: { name: string; price: number }[];
     observations?: string;
+    kind?: 'pizza';
+    pizza?: Omit<OrderItemPizza, 'quantity' | 'notes'> | null;
+    unitPriceComputed?: number;
   }[];
   total: number;
   payment: {
@@ -161,7 +165,10 @@ export function toFirebaseOrder(params: {
       quantity: ci.quantity,
       removedIngredients: ci.removedIngredients,
       selectedExtras: ci.selectedExtras,
-      observations: ci.observations || ''
+      observations: ci.observations || '',
+      kind: ci.pizzaConfig ? 'pizza' : undefined,
+      pizza: ci.pizzaConfig || null,
+      unitPriceComputed: ci.pizzaConfig?.unitPriceComputed
     })),
     total,
     payment: {

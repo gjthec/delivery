@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MenuItem, ExtraItem, Coupon } from '../types';
+import { MenuItem, ExtraItem, Coupon, PizzaFlavor, PizzaSizeOption, Ingredient } from '../types';
 import { improveMenuItem } from '../services/aiService'; // Adjusted path
-import { dbMenu, dbCatalog, dbCoupons, dbSettings } from '../services/dbService'; // Adjusted path
+import { dbMenu, dbCatalog, dbCoupons, dbSettings, dbPizzaFlavors, dbIngredientsCatalog } from '../services/dbService'; // Adjusted path
 import { 
   Plus, Edit2, Trash2, X, Sparkles, RefreshCw, 
   Image as ImageIcon, Tag, List, PlusCircle, MinusCircle, DollarSign,
@@ -9,6 +9,7 @@ import {
   TicketPercent, AlertTriangle, Bike
 } from 'lucide-react';
 import { INITIAL_CATEGORIES } from '../mockData';
+import PizzaConfiguratorModal from '../pizza/PizzaConfiguratorModal';
 
 type SortOption = 'category' | 'price-asc' | 'price-desc' | 'name';
 
@@ -27,6 +28,14 @@ const MenuManager: React.FC = () => {
 
   // Store Settings State
   const [deliveryFee, setDeliveryFee] = useState<string>('');
+  const [pizzaFlavors, setPizzaFlavors] = useState<PizzaFlavor[]>([]);
+  const [pizzaFlavorDraft, setPizzaFlavorDraft] = useState<PizzaFlavor>({ id: '', name: '', description: '', imageUrl: '', tags: [], ingredients: [], active: true, priceDeltaBySize: null });
+  const [pizzaFlavorSearch, setPizzaFlavorSearch] = useState('');
+  const [pizzaFlavorIngredientsInput, setPizzaFlavorIngredientsInput] = useState('');
+  const [pizzaFlavorTagsInput, setPizzaFlavorTagsInput] = useState('');
+  const [ingredientCatalog, setIngredientCatalog] = useState<Ingredient[]>([]);
+  const [ingredientSearch, setIngredientSearch] = useState('');
+  const [wizardStep, setWizardStep] = useState(1);
 
   // View & Sort States
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -35,7 +44,10 @@ const MenuManager: React.FC = () => {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isPizzaConfiguratorOpen, setIsPizzaConfiguratorOpen] = useState(false);
+  const [editingPizzaBase, setEditingPizzaBase] = useState<MenuItem | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [newItemType, setNewItemType] = useState<'normal' | 'pizza'>('normal');
   const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
   
   // States para painel de gerenciamento global
@@ -58,7 +70,10 @@ const MenuManager: React.FC = () => {
     size: 'M' as 'P' | 'M' | 'G',
     tags: [] as string[],
     ingredients: [] as string[],
-    extras: [] as ExtraItem[]
+    extras: [] as ExtraItem[],
+    type: 'regular' as 'regular' | 'pizza',
+    pricingStrategy: 'highestFlavor' as 'highestFlavor' | 'averageFlavor' | 'fixedBySize',
+    sizes: [] as PizzaSizeOption[]
   });
 
   const [newTag, setNewTag] = useState('');
@@ -94,7 +109,9 @@ const MenuManager: React.FC = () => {
       await Promise.all([
         loadCatalogs(menuData),
         loadCoupons(),
-        loadSettings()
+        loadSettings(),
+        loadPizzaFlavors(),
+        loadIngredientCatalog()
       ]);
     };
 
@@ -107,6 +124,16 @@ const MenuManager: React.FC = () => {
         setFormData(p => ({ ...p, category: categories[0] }));
     }
   }, [categories]);
+
+
+  useEffect(() => {
+    if (!isModalOpen || editingId) return;
+    if (newItemType !== 'pizza') return;
+
+    setIsModalOpen(false);
+    setEditingPizzaBase(null);
+    setIsPizzaConfiguratorOpen(true);
+  }, [isModalOpen, editingId, newItemType]);
 
   const uniqueSorted = (values: string[]) => Array.from(
     new Map(values.map(value => [value.trim().toLowerCase(), value.trim()])).values()
@@ -145,6 +172,17 @@ const MenuManager: React.FC = () => {
   const loadCoupons = async () => {
     const data = await dbCoupons.getAll();
     setCoupons(data);
+  };
+
+
+  const loadPizzaFlavors = async () => {
+    const data = await dbPizzaFlavors.getAll();
+    setPizzaFlavors(data);
+  };
+
+  const loadIngredientCatalog = async () => {
+    const data = await dbIngredientsCatalog.getAll();
+    setIngredientCatalog(data);
   };
 
   const loadSettings = async () => {
@@ -243,6 +281,12 @@ const MenuManager: React.FC = () => {
   const processedItems = getProcessedItems();
 
   const handleEdit = (item: MenuItem) => {
+    if (item.type === 'pizza') {
+      setEditingPizzaBase(item);
+      setIsPizzaConfiguratorOpen(true);
+      return;
+    }
+
     setFormData({
       name: item.name,
       category: item.category,
@@ -254,9 +298,13 @@ const MenuManager: React.FC = () => {
       size: item.size,
       tags: [...item.tags],
       ingredients: [...item.ingredients],
-      extras: [...item.extras]
+      extras: [...item.extras],
+      type: item.type || 'regular',
+      pricingStrategy: item.pricingStrategy || 'highestFlavor',
+      sizes: item.sizes || []
     });
     setEditingId(item.id);
+    setWizardStep(item.type === 'pizza' ? 1 : 1);
     setIsModalOpen(true);
   };
 
@@ -274,16 +322,29 @@ const MenuManager: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!formData.name || !formData.price) {
+    if (!formData.name || (!formData.price && formData.type !== 'pizza')) {
       openAlert("Por favor, preencha nome e preço.");
       return;
+    }
+
+    if (formData.type === 'pizza') {
+      if (formData.sizes.length === 0) {
+        openAlert('Adicione ao menos um tamanho para a pizza.');
+        return;
+      }
+
+      const invalidSize = formData.sizes.find((size) => size.basePrice < 0 || size.maxFlavors < 1);
+      if (invalidSize) {
+        openAlert('Revise os tamanhos: preço base deve ser >= 0 e máximo de sabores >= 1.');
+        return;
+      }
     }
 
     const payload: MenuItem = {
       id: editingId || `b-${Date.now()}`,
       name: formData.name,
       category: formData.category,
-      price: parseFloat(formData.price),
+      price: formData.type === 'pizza' ? (formData.sizes[0]?.basePrice || 0) : parseFloat(formData.price),
       costPrice: formData.costPrice ? parseFloat(formData.costPrice) : undefined,
       originalPrice: formData.originalPrice ? parseFloat(formData.originalPrice) : undefined,
       description: formData.description,
@@ -293,7 +354,10 @@ const MenuManager: React.FC = () => {
       size: formData.size,
       tags: formData.tags,
       ingredients: formData.ingredients,
-      extras: formData.extras
+      extras: formData.extras,
+      type: formData.type,
+      pricingStrategy: formData.pricingStrategy,
+      sizes: formData.type === 'pizza' ? formData.sizes : []
     };
 
     await Promise.all([
@@ -321,9 +385,14 @@ const MenuManager: React.FC = () => {
       size: 'M',
       tags: [],
       ingredients: [],
-      extras: []
+      extras: [],
+      type: 'regular',
+      pricingStrategy: 'highestFlavor',
+      sizes: []
     });
     setEditingId(null);
+    setNewItemType('normal');
+    setWizardStep(1);
     setIsAddingCategory(false);
     setNewCategoryName('');
   };
@@ -379,6 +448,97 @@ const MenuManager: React.FC = () => {
     } 
   };
   const removeExtra = (index: number) => { setFormData(p => ({ ...p, extras: p.extras.filter((_, i) => i !== index) })); };
+
+  const addPizzaSize = () => {
+    setFormData((prev) => ({
+      ...prev,
+      sizes: [...prev.sizes, { id: `S${prev.sizes.length + 1}`, label: `Tamanho ${prev.sizes.length + 1}`, basePrice: 0, maxFlavors: 2, slices: null }]
+    }));
+  };
+
+  const updatePizzaSize = (index: number, field: keyof PizzaSizeOption, value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      sizes: prev.sizes.map((size, i) => {
+        if (i !== index) return size;
+
+        if (field === 'basePrice') return { ...size, basePrice: Math.max(0, Number(value) || 0) };
+        if (field === 'maxFlavors') return { ...size, maxFlavors: Math.max(1, Number(value) || 1) };
+        if (field === 'slices') return { ...size, slices: value ? Math.max(1, Number(value) || 1) : null };
+
+        return { ...size, [field]: value };
+      })
+    }));
+  };
+
+  const savePizzaFlavor = async () => {
+    if (!pizzaFlavorDraft.name.trim()) return;
+
+    const parsedDeltas = (pizzaFlavorDraft.priceDeltaBySize && Object.keys(pizzaFlavorDraft.priceDeltaBySize).length > 0)
+      ? pizzaFlavorDraft.priceDeltaBySize
+      : null;
+
+    const id = pizzaFlavorDraft.id || `flavor-${Date.now()}`;
+    await dbPizzaFlavors.save({
+      ...pizzaFlavorDraft,
+      id,
+      tags: pizzaFlavorDraft.tags || [],
+      ingredients: (pizzaFlavorDraft.ingredients || []).filter((ingredient) => ingredient.id && ingredient.name),
+      active: pizzaFlavorDraft.active !== false,
+      priceDeltaBySize: parsedDeltas
+    });
+
+    setPizzaFlavorDraft({ id: '', name: '', description: '', imageUrl: '', tags: [], ingredients: [], active: true, priceDeltaBySize: null });
+    setIngredientSearch('');
+    setPizzaFlavorIngredientsInput('');
+    setPizzaFlavorTagsInput('');
+    loadPizzaFlavors();
+  };
+
+  const filteredPizzaFlavors = pizzaFlavors.filter((flavor) => {
+    const query = pizzaFlavorSearch.trim().toLowerCase();
+    if (!query) return true;
+    return flavor.name.toLowerCase().includes(query)
+      || flavor.tags.some((tag) => tag.toLowerCase().includes(query));
+  });
+
+
+  const createIngredientInline = async (name: string) => {
+    const normalized = name.trim();
+    if (!normalized) return;
+
+    const existing = ingredientCatalog.find((ingredient) => ingredient.name.toLowerCase() === normalized.toLowerCase());
+    if (existing) {
+      if (!pizzaFlavorDraft.ingredients.some((ingredient) => ingredient.id === existing.id)) {
+        setPizzaFlavorDraft((prev) => ({ ...prev, ingredients: [...prev.ingredients, { id: existing.id, name: existing.name }] }));
+      }
+      return;
+    }
+
+    const ingredient: Ingredient = {
+      id: `ingredient-${Date.now()}`,
+      name: normalized,
+      active: true,
+      tags: [],
+      allergens: null
+    };
+
+    await dbIngredientsCatalog.save(ingredient);
+    await loadIngredientCatalog();
+    setPizzaFlavorDraft((prev) => ({ ...prev, ingredients: [...prev.ingredients, { id: ingredient.id, name: ingredient.name }] }));
+  };
+
+  const toggleIngredientOnFlavor = (ingredient: Ingredient) => {
+    setPizzaFlavorDraft((prev) => {
+      const exists = prev.ingredients.some((item) => item.id === ingredient.id);
+      return {
+        ...prev,
+        ingredients: exists
+          ? prev.ingredients.filter((item) => item.id !== ingredient.id)
+          : [...prev.ingredients, { id: ingredient.id, name: ingredient.name }]
+      };
+    });
+  };
 
   // --- GERENCIAMENTO GLOBAL ---
 
@@ -527,7 +687,34 @@ const MenuManager: React.FC = () => {
                         </div>
                     ) : (
                         <>
-                            <div className="flex items-center gap-3">
+      
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Ingredientes (chips/autocomplete)</p>
+                        <div className="flex flex-wrap gap-2">
+                          {pizzaFlavorDraft.ingredients.map((ingredient) => (
+                            <button key={ingredient.id} onClick={() => setPizzaFlavorDraft((prev) => ({ ...prev, ingredients: prev.ingredients.filter((item) => item.id !== ingredient.id) }))} className="px-2 py-1 rounded-lg bg-orange-100 text-orange-700 text-[10px] font-black uppercase">
+                              {ingredient.name} ✕
+                            </button>
+                          ))}
+                        </div>
+                        <input value={ingredientSearch} onChange={(e) => setIngredientSearch(e.target.value)} placeholder="Buscar ingrediente ou criar novo" className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-2 rounded-xl border border-stone-200 dark:border-stone-700 text-xs font-bold" />
+                        <div className="max-h-28 overflow-y-auto grid grid-cols-2 gap-2">
+                          {ingredientCatalog
+                            .filter((ingredient) => ingredient.active)
+                            .filter((ingredient) => !ingredientSearch.trim() || ingredient.name.toLowerCase().includes(ingredientSearch.trim().toLowerCase()))
+                            .slice(0, 12)
+                            .map((ingredient) => (
+                              <button key={ingredient.id} onClick={() => toggleIngredientOnFlavor(ingredient)} className={`text-left px-2 py-1 rounded-lg border text-[11px] font-bold ${pizzaFlavorDraft.ingredients.some((item) => item.id === ingredient.id) ? 'border-orange-500 text-orange-600' : 'border-stone-200 text-stone-500'}`}>
+                                {ingredient.name}
+                              </button>
+                            ))}
+                        </div>
+                        {!!ingredientSearch.trim() && !ingredientCatalog.some((ingredient) => ingredient.name.toLowerCase() === ingredientSearch.trim().toLowerCase()) && (
+                          <button onClick={() => createIngredientInline(ingredientSearch)} className="text-[10px] font-black uppercase text-orange-500">Criar ingrediente "{ingredientSearch.trim()}"</button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-3">
                                 <span className="text-sm font-bold text-stone-700 dark:text-stone-300">{item}</span>
                                 {getUsageCount(type, item) > 0 && (
                                   <span className="text-[10px] font-black bg-stone-100 dark:bg-stone-800 text-stone-400 px-2 py-0.5 rounded-full" title="Itens utilizando este registro">{getUsageCount(type, item)}</span>
@@ -702,7 +889,7 @@ const MenuManager: React.FC = () => {
                 <Settings size={18} /> <span className="hidden sm:inline">Global</span>
              </button>
              <button 
-               onClick={() => { resetForm(); setIsModalOpen(true); }} 
+               onClick={() => { resetForm(); setNewItemType('normal'); setIsModalOpen(true); }} 
                className="flex-1 xl:flex-initial flex items-center justify-center gap-2 bg-orange-500 text-white px-6 py-3 rounded-2xl font-black uppercase text-[10px] shadow-lg shadow-orange-500/20 hover:scale-105 active:scale-95 transition-all whitespace-nowrap"
              >
                <Plus size={18} /> <span className="inline">Novo</span>
@@ -771,6 +958,18 @@ const MenuManager: React.FC = () => {
         </div>
       )}
 
+
+      <PizzaConfiguratorModal
+        open={isPizzaConfiguratorOpen}
+        onClose={() => setIsPizzaConfiguratorOpen(false)}
+        pizzaBase={editingPizzaBase}
+        categories={categories}
+        onSaved={async () => {
+          const menuData = await loadMenu();
+          await loadCatalogs(menuData);
+        }}
+      />
+
       {/* MODAL PRINCIPAL (NOVO/EDITAR) */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-stone-950/90 backdrop-blur-xl z-[200] flex items-center justify-center p-2 sm:p-4">
@@ -780,14 +979,40 @@ const MenuManager: React.FC = () => {
               {/* Header: Fixo no topo */}
               <div className="flex justify-between items-center p-6 lg:px-12 lg:pt-12 lg:pb-6 border-b border-stone-100 dark:border-stone-800 bg-white dark:bg-stone-900 shrink-0 z-10">
                 <div>
-                  <h2 className="text-xl lg:text-2xl font-black uppercase tracking-tight text-stone-800 dark:text-white">Ficha Técnica do Prato</h2>
-                  <p className="text-sm text-stone-400 font-medium">{editingId ? 'Editando prato existente' : 'Criando novo prato para o cardápio'}</p>
+                  <h2 className="text-xl lg:text-2xl font-black uppercase tracking-tight text-stone-800 dark:text-white">{editingId ? 'Ficha Técnica do Prato' : 'Novo Item'}</h2>
+                  <p className="text-sm text-stone-400 font-medium">{editingId ? 'Editando prato existente' : 'Escolha o tipo do item para começar.'}</p>
                 </div>
                 <button onClick={() => setIsModalOpen(false)} className="p-2 lg:p-3 bg-stone-100 dark:bg-stone-800 rounded-2xl text-stone-400 hover:text-red-500 transition-all"><X size={20} className="lg:w-6 lg:h-6"/></button>
               </div>
 
               {/* Scrollable Content: Apenas o formulário rola */}
               <div className="flex-1 overflow-y-auto custom-scrollbar p-6 lg:px-12 space-y-10">
+                {!editingId && (
+                  <div className="rounded-2xl border border-stone-200 dark:border-stone-700 p-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-400 mb-2">Tipo do item</p>
+                    <div className="flex gap-2">
+                      <button onClick={() => setNewItemType('normal')} className={`px-4 py-2 rounded-xl text-xs font-black uppercase border ${newItemType === 'normal' ? 'bg-orange-500 text-white border-orange-500' : 'border-stone-200 text-stone-500'}`}>Normal</button>
+                      <button onClick={() => setNewItemType('pizza')} className={`px-4 py-2 rounded-xl text-xs font-black uppercase border ${newItemType === 'pizza' ? 'bg-stone-900 text-white border-stone-900' : 'border-stone-200 text-stone-500'}`}>Pizza</button>
+                    </div>
+                  </div>
+                )}
+
+                {formData.type === 'pizza' && (
+                  <div className="rounded-3xl border border-orange-100 dark:border-orange-900/30 p-4 space-y-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-500">Configurador de Pizza</p>
+                    <div className="flex gap-2 flex-wrap">
+                      {[{ id: 1, label: '1. Tamanhos' }, { id: 2, label: '2. Preço' }, { id: 3, label: '3. Sabores' }].map((step) => (
+                        <button key={step.id} onClick={() => setWizardStep(step.id)} className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase border ${wizardStep === step.id ? 'bg-orange-500 text-white border-orange-500' : 'border-stone-200 text-stone-500'}`}>{step.label}</button>
+                      ))}
+                    </div>
+                    <div className="text-[11px] text-stone-500 font-bold">
+                      {wizardStep === 1 && 'Defina tamanhos, preço base e máximo de sabores por tamanho. Preview ao vivo abaixo.'}
+                      {wizardStep === 2 && 'Escolha estratégia de preço da pizza (default: highestFlavor).'}
+                      {wizardStep === 3 && 'Cadastre sabores, ingredientes e deltas por tamanho no bloco de sabores.'}
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
                   {/* Coluna 1: Básico e Descrição */}
                   <div className="space-y-8">
@@ -898,6 +1123,32 @@ const MenuManager: React.FC = () => {
                         </div>
                       </div>
                     </div>
+
+                    {formData.type === 'pizza' && (wizardStep === 1 || wizardStep === 2) && (
+                      <div className="space-y-4 border border-orange-100 dark:border-orange-900/30 rounded-3xl p-4">
+                        <h3 className="text-[10px] font-black uppercase text-orange-500 tracking-[0.2em]">Configuração de Pizza</h3>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Estratégia de preço</label>
+                          <select value={formData.pricingStrategy} onChange={e => setFormData(p => ({ ...p, pricingStrategy: e.target.value as 'highestFlavor' | 'averageFlavor' | 'fixedBySize' }))} className="w-full bg-stone-50 dark:bg-stone-800 p-3 rounded-2xl border border-stone-200 dark:border-stone-700 font-bold">
+                            <option value="highestFlavor">highestFlavor (padrão)</option>
+                            <option value="averageFlavor">averageFlavor</option>
+                            <option value="fixedBySize">fixedBySize</option>
+                          </select>
+                        </div>
+                        <button type="button" onClick={addPizzaSize} className="px-4 py-2 rounded-xl bg-orange-500 text-white text-[10px] font-black uppercase">Adicionar tamanho</button>
+                        <div className="space-y-2">
+                          {formData.sizes.map((pizzaSize, index) => (
+                            <div key={`${pizzaSize.id}-${index}`} className="grid grid-cols-2 lg:grid-cols-5 gap-2">
+                              <input value={pizzaSize.id} onChange={(e) => updatePizzaSize(index, 'id', e.target.value)} placeholder="ID" className="bg-stone-50 dark:bg-stone-800 p-2 rounded-xl border border-stone-200 dark:border-stone-700 text-xs font-bold" />
+                              <input value={pizzaSize.label} onChange={(e) => updatePizzaSize(index, 'label', e.target.value)} placeholder="Nome" className="bg-stone-50 dark:bg-stone-800 p-2 rounded-xl border border-stone-200 dark:border-stone-700 text-xs font-bold" />
+                              <input type="number" min={0} value={pizzaSize.basePrice} onChange={(e) => updatePizzaSize(index, 'basePrice', e.target.value)} placeholder="Preço base" className="bg-stone-50 dark:bg-stone-800 p-2 rounded-xl border border-stone-200 dark:border-stone-700 text-xs font-bold" />
+                              <input type="number" min={1} value={pizzaSize.maxFlavors} onChange={(e) => updatePizzaSize(index, 'maxFlavors', e.target.value)} placeholder="Máx sabores" className="bg-stone-50 dark:bg-stone-800 p-2 rounded-xl border border-stone-200 dark:border-stone-700 text-xs font-bold" />
+                              <input type="number" min={1} value={pizzaSize.slices ?? ''} onChange={(e) => updatePizzaSize(index, 'slices', e.target.value)} placeholder="Fatias" className="bg-stone-50 dark:bg-stone-800 p-2 rounded-xl border border-stone-200 dark:border-stone-700 text-xs font-bold" />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="space-y-4">
                       <label className="text-[10px] font-black uppercase text-stone-500 ml-2 flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between">
@@ -1075,6 +1326,32 @@ const MenuManager: React.FC = () => {
                           >
                              Salvar
                           </button>
+                      </div>
+                  </div>
+
+                  <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-3xl p-5 mb-6 space-y-4">
+                      <h3 className="text-xs font-black uppercase tracking-[0.2em] text-stone-400">Sabores de Pizza</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <input value={pizzaFlavorDraft.name} onChange={(e) => setPizzaFlavorDraft((prev) => ({ ...prev, name: e.target.value }))} className="bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700 font-bold" placeholder="Nome do sabor" />
+                        <input value={pizzaFlavorDraft.description || ''} onChange={(e) => setPizzaFlavorDraft((prev) => ({ ...prev, description: e.target.value }))} className="bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700 font-medium" placeholder="Descrição" />
+                        <input value={pizzaFlavorTagsInput} onChange={(e) => setPizzaFlavorTagsInput(e.target.value)} onBlur={() => setPizzaFlavorDraft((prev) => ({ ...prev, tags: pizzaFlavorTagsInput.split(',').map((v) => v.trim()).filter(Boolean) }))} className="bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700 font-medium" placeholder="Tags (separadas por vírgula)" />
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button onClick={() => setPizzaFlavorDraft((prev) => ({ ...prev, active: !prev.active }))} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase ${pizzaFlavorDraft.active ? 'bg-green-100 text-green-700' : 'bg-zinc-100 text-zinc-500'}`}>{pizzaFlavorDraft.active ? 'Ativo' : 'Inativo'}</button>
+                        <button onClick={savePizzaFlavor} className="px-4 py-2 rounded-xl bg-orange-500 text-white font-black uppercase text-[10px]">Salvar sabor</button>
+                        <input value={pizzaFlavorSearch} onChange={(e) => setPizzaFlavorSearch(e.target.value)} placeholder="Buscar sabor/tag" className="ml-auto bg-stone-50 dark:bg-stone-800 px-4 py-2 rounded-xl border border-stone-200 dark:border-stone-700 text-xs font-bold" />
+                      </div>
+                      <div className="max-h-52 overflow-y-auto space-y-2">
+                        {filteredPizzaFlavors.map((flavor) => (
+                          <button key={flavor.id} onClick={() => {
+                            setPizzaFlavorDraft(flavor);
+                            setPizzaFlavorIngredientsInput((flavor.ingredients || []).map((ingredient) => ingredient.name).join(', '));
+                            setPizzaFlavorTagsInput((flavor.tags || []).join(', '));
+                          }} className="w-full text-left rounded-2xl border border-stone-200 dark:border-stone-700 p-3 hover:border-orange-300 transition-colors">
+                            <p className="text-xs font-black text-stone-700 dark:text-stone-100">{flavor.name} {!flavor.active ? '(inativo)' : ''}</p>
+                            <p className="text-[11px] text-stone-500 truncate">Ingredientes: {(flavor.ingredients || []).join(', ') || '—'}</p>
+                          </button>
+                        ))}
                       </div>
                   </div>
 

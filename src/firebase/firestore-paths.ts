@@ -26,6 +26,7 @@ export const notificationsCollectionRef = (db: Firestore) => tenantCollection(db
 
 // Compatibilidade com dados antigos do cardápio.
 export const menuCollectionRef = (db: Firestore) => tenantCollection(db, 'menu');
+export const pizzaFlavorsCollectionRef = (db: Firestore) => tenantCollection(db, 'pizzaFlavors');
 
 export const settingsDocRef = (db: Firestore) => tenantDoc(db, 'settings', 'general');
 export const storeSettingsDocRef = (db: Firestore) => tenantDoc(db, 'settings', 'store');

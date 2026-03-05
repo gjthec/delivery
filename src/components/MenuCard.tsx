@@ -30,6 +30,7 @@ const MenuCard: React.FC<Props> = ({ item, isHighlighted, onAdd, count = 0 }) =>
 
   const handleAdd = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (item.type === 'pizza') return;
     setIsAdding(true);
     setShowPlusOne(true);
     onAdd?.(item);

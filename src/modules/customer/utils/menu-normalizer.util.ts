@@ -1,6 +1,6 @@
 import { getTenantId } from '../../../utils/tenant.util';
 import { MenuItem as AppMenuItem } from '../../../types';
-import { MenuItemSource, MenuItemExtra } from '../types/menu.types';
+import { MenuItemSource, MenuItemExtra, PizzaPricingStrategy, PizzaSizeSource } from '../types/menu.types';
 
 const isDev = import.meta.env.DEV;
 
@@ -38,6 +38,96 @@ function normalizeExtras(value: unknown): MenuItemExtra[] {
     .filter((item): item is MenuItemExtra => Boolean(item));
 }
 
+
+
+function normalizePizzaSizes(value: unknown): PizzaSizeSource[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((size) => {
+      if (!size || typeof size !== 'object') return null;
+      const payload = size as Record<string, unknown>;
+      const id = String(payload.id ?? '').trim();
+      const label = String(payload.label ?? '').trim();
+      const basePrice = toNumber(payload.basePrice);
+      const maxFlavors = toNumber(payload.maxFlavors);
+      const slices = toNumber(payload.slices);
+
+      if (!id || !label || basePrice === null || maxFlavors === null) return null;
+
+      return {
+        id,
+        label,
+        basePrice,
+        maxFlavors: Math.max(1, Math.floor(maxFlavors)),
+        slices
+      };
+    })
+    .filter((item): item is PizzaSizeSource => Boolean(item));
+}
+
+function normalizePricingStrategy(value: unknown): PizzaPricingStrategy {
+  if (
+    value === 'highestFlavor'
+    || value === 'averageFlavor'
+    || value === 'fixedBySize'
+  ) {
+    return value;
+  }
+
+  return 'highestFlavor';
+}
+
+
+
+function normalizeFlavorIngredients(value: unknown): Array<{ id: string; name: string }> {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((ingredient) => {
+      if (!ingredient || typeof ingredient !== 'object') return null;
+      const payload = ingredient as Record<string, unknown>;
+      const id = String(payload.id ?? '').trim();
+      const name = String(payload.name ?? '').trim();
+      if (!id || !name) return null;
+      return { id, name };
+    })
+    .filter((item): item is { id: string; name: string } => Boolean(item));
+}
+
+function normalizePriceDeltaBySize(value: unknown): Record<string, number> | null {
+  if (!value || typeof value !== 'object') return null;
+
+  const entries = Object.entries(value as Record<string, unknown>)
+    .map(([sizeId, delta]) => {
+      const parsed = toNumber(delta);
+      return parsed === null ? null : [String(sizeId), parsed] as const;
+    })
+    .filter((entry): entry is readonly [string, number] => Boolean(entry));
+
+  if (entries.length === 0) return null;
+  return Object.fromEntries(entries);
+}
+
+export function normalizePizzaFlavor(raw: unknown, fallbackId?: string) {
+  if (!raw || typeof raw !== 'object') return null;
+  const payload = raw as Record<string, unknown>;
+  const id = String(payload.id ?? fallbackId ?? '').trim();
+  const name = String(payload.name ?? '').trim();
+  if (!id || !name) return null;
+
+  return {
+    id,
+    name,
+    description: payload.description ? String(payload.description) : null,
+    imageUrl: payload.imageUrl ? String(payload.imageUrl) : null,
+    active: typeof payload.active === 'boolean' ? payload.active : true,
+    tags: toStringArray(payload.tags),
+    ingredients: normalizeFlavorIngredients(payload.ingredients),
+    priceDeltaBySize: normalizePriceDeltaBySize(payload.priceDeltaBySize)
+  };
+}
+
 function normalizeSingleItem(raw: unknown, fallbackId?: string): MenuItemSource | null {
   if (!raw || typeof raw !== 'object') return null;
 
@@ -52,8 +142,11 @@ function normalizeSingleItem(raw: unknown, fallbackId?: string): MenuItemSource 
     return null;
   }
 
+  const itemType = item.type === 'pizza' ? 'pizza' : 'regular';
+
   return {
     id,
+    type: itemType,
     name,
     description,
     category,
@@ -67,7 +160,9 @@ function normalizeSingleItem(raw: unknown, fallbackId?: string): MenuItemSource 
     rating: toNumber(item.rating),
     size: item.size ? String(item.size) : null,
     tags: toStringArray(item.tags),
-    active: typeof item.active === 'boolean' ? item.active : true
+    active: typeof item.active === 'boolean' ? item.active : true,
+    pricingStrategy: normalizePricingStrategy(item.pricingStrategy),
+    sizes: normalizePizzaSizes(item.sizes)
   };
 }
 
@@ -143,6 +238,9 @@ export function toAppMenuItem(item: MenuItemSource): AppMenuItem {
   return {
     ...item,
     imageUrl: item.imageUrl || '',
-    calories: undefined
+    calories: undefined,
+    type: item.type || 'regular',
+    pricingStrategy: item.pricingStrategy,
+    sizes: item.sizes
   };
 }

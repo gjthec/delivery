@@ -102,6 +102,10 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
   }, [feedback]);
 
   const subtotal = cartItems.reduce((acc, ci) => {
+    if (ci.pizzaConfig) {
+      return acc + (ci.pizzaConfig.unitPriceComputed * ci.quantity);
+    }
+
     const extrasTotal = ci.selectedExtras.reduce((a, b) => a + b.price, 0);
     return acc + (ci.item.price + extrasTotal) * ci.quantity;
   }, 0);
@@ -447,7 +451,8 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {cartItems.map((cartItem, index) => {
                       const extrasPrice = cartItem.selectedExtras.reduce((a, b) => a + b.price, 0);
-                      const itemTotal = (cartItem.item.price + extrasPrice) * cartItem.quantity;
+                      const unitPrice = cartItem.pizzaConfig?.unitPriceComputed ?? (cartItem.item.price + extrasPrice);
+                      const itemTotal = unitPrice * cartItem.quantity;
                       
                       return (
                         <div key={cartItem.cartId} className="flex gap-4 p-5 bg-white dark:bg-zinc-900 rounded-[2.5rem] border border-zinc-100 dark:border-zinc-800 shadow-sm group">
@@ -459,8 +464,9 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
                                 <span className="font-black text-sm text-orange-600">R${itemTotal.toFixed(2)}</span>
                               </div>
                               <p className="text-[10px] text-zinc-400 font-bold truncate">
-                                {cartItem.selectedExtras.length > 0 && `+ ${cartItem.selectedExtras.map(e => e.name).join(', ')}`}
-                                {cartItem.removedIngredients.length > 0 && ` (sem ${cartItem.removedIngredients.join(', ')})`}
+                                {cartItem.pizzaConfig
+                                  ? `${cartItem.pizzaConfig.sizeLabel} • ${cartItem.pizzaConfig.segments.map((segment) => segment.flavorName).join(', ')}`
+                                  : `${cartItem.selectedExtras.length > 0 ? `+ ${cartItem.selectedExtras.map(e => e.name).join(', ')}` : ''}${cartItem.removedIngredients.length > 0 ? ` (sem ${cartItem.removedIngredients.join(', ')})` : ''}`}
                               </p>
                             </div>
                             
