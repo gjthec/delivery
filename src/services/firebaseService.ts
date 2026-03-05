@@ -1,11 +1,10 @@
 
 import { IS_FIREBASE_ON } from '../constants';
 import { db } from '../firebaseConfig';
-import { collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
-import { categoriesCollectionRef, couponsCollectionRef, menuCollectionRef, storeSettingsDocRef } from '../firebase/firestore-paths';
+import { deleteDoc, doc, getDoc, getDocs, onSnapshot } from 'firebase/firestore';
+import { categoriesCollectionRef, couponsCollectionRef, menuCollectionRef, notificationsCollectionRef, storeSettingsDocRef } from '../firebase/firestore-paths';
 import {
   AdminNotification,
-  AppNotification,
   CartItem,
   CheckoutDetails,
   Category,
@@ -14,22 +13,8 @@ import {
   NotificationType,
   OrderStatus
 } from '../types';
-
-function buildPendingOrderNotification(orderId: string): AppNotification {
-  return {
-    id: orderId,
-    title: 'Pedido pendente',
-    message: `Novo pedido pendente: ${orderId}`,
-    time: new Date().toISOString(),
-    read: false,
-    type: 'created',
-    payload: {
-      orderId,
-      status: 'pending',
-      event: 'created'
-    }
-  };
-}
+import { createTenantOrder, getTenantOrdersByPhone } from './order.service';
+import { getTenantId } from '../utils/tenant.util';
 
 function removeUndefinedDeep<T>(value: T): T {
   if (Array.isArray(value)) {
@@ -200,85 +185,7 @@ export function toFirebaseOrder(params: {
 export async function fetchOrdersByPhone(phone: string): Promise<FirebaseOrder[] | null> {
   if (!IS_FIREBASE_ON || !phone.trim()) return null;
 
-  const normalizedPhone = normalizePhone(phone);
-  const orderPaths: string[][] = [
-    ['orders'],
-    ['foodai', 'admin', 'orders']
-  ];
-
-  const mapOrders = (snapshot: Awaited<ReturnType<typeof getDocs>>) => snapshot.docs.map((docSnap) => ({
-    ...(docSnap.data() as FirebaseOrder),
-    id: docSnap.id
-  }));
-
-  try {
-    if (normalizedPhone) {
-      const userOrdersSnapshot = await getDocs(collection(db, 'foodai', 'user', normalizedPhone, 'profile', 'orders'));
-      if (!userOrdersSnapshot.empty) {
-        return userOrdersSnapshot.docs
-          .map((docSnap) => ({
-            ...(docSnap.data() as FirebaseOrder),
-            id: docSnap.id
-          }))
-          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      }
-    }
-
-    for (const pathParts of orderPaths) {
-      const ordersRef = collection(db, ...pathParts);
-      const queryByNestedPhone = query(ordersRef, where('customer.phone', '==', phone));
-      const queryBySimplePhone = query(ordersRef, where('customerPhone', '==', phone));
-
-      const [nestedSnapshot, simpleSnapshot] = await Promise.all([
-        getDocs(queryByNestedPhone),
-        getDocs(queryBySimplePhone)
-      ]);
-
-      const combined = [...mapOrders(nestedSnapshot), ...mapOrders(simpleSnapshot)];
-
-      if (combined.length > 0) {
-        const uniqueOrders = Array.from(new Map(combined.map((order) => [order.id, order])).values());
-
-        return uniqueOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      }
-    }
-
-    return [];
-  } catch (error) {
-    // fallback sem query composta (busca completa + filtro local)
-    console.warn('[Firebase] Fallback de busca por telefone ativado:', error);
-
-    try {
-      const matchedOrders: FirebaseOrder[] = [];
-
-      if (normalizedPhone) {
-        const userOrdersSnapshot = await getDocs(collection(db, 'foodai', 'user', normalizedPhone, 'profile', 'orders'));
-        userOrdersSnapshot.docs.forEach((docSnap) => {
-          matchedOrders.push({ ...(docSnap.data() as FirebaseOrder), id: docSnap.id });
-        });
-      }
-
-      for (const pathParts of orderPaths) {
-        const snapshot = await getDocs(collection(db, ...pathParts));
-
-        snapshot.docs.forEach((docSnap) => {
-          const order = { ...(docSnap.data() as FirebaseOrder), id: docSnap.id };
-          const orderPhones = [order.customer?.phone, order.customerPhone]
-            .filter((value): value is string => Boolean(value))
-            .map(normalizePhone);
-
-          if (orderPhones.includes(normalizedPhone)) {
-            matchedOrders.push(order);
-          }
-        });
-      }
-
-      return matchedOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    } catch (fallbackError) {
-      console.error('[Firebase] Erro ao buscar pedidos por telefone:', fallbackError);
-      return null;
-    }
-  }
+  return getTenantOrdersByPhone(phone);
 }
 
 /**
@@ -290,55 +197,17 @@ export async function saveOrderToFirebase(orderData: FirebaseOrder): Promise<boo
     return true;
   }
 
-  try {
-    console.log('[Firebase] Gravando pedido no Firestore...');
-    const ordersRef = collection(db, 'foodai', 'admin', 'orders');
-    const orderRef = doc(ordersRef, orderData.id);
-
-    await setDoc(orderRef, removeUndefinedDeep({
-      ...orderData,
-      serverTimestamp: serverTimestamp()
-    }));
-
-    const customerPhone = orderData.customer?.phone || orderData.customerPhone;
-    const userPhoneDocId = customerPhone ? toFirestorePhoneDocId(customerPhone) : '';
-
-    if (userPhoneDocId) {
-      const userProfileRef = doc(db, 'foodai', 'user', userPhoneDocId, 'profile');
-      const userOrdersRef = collection(db, 'foodai', 'user', userPhoneDocId, 'profile', 'orders');
-      const userOrderRef = doc(userOrdersRef, orderData.id);
-
-      await Promise.all([
-        setDoc(userProfileRef, removeUndefinedDeep({
-          phone: customerPhone,
-          normalizedPhone: userPhoneDocId,
-          name: orderData.customer?.name || orderData.customerName,
-          lastAddress: orderData.customer?.address || orderData.address,
-          updatedAt: new Date().toISOString(),
-          serverTimestamp: serverTimestamp()
-        }), { merge: true }),
-        setDoc(userOrderRef, removeUndefinedDeep({
-          ...orderData,
-          serverTimestamp: serverTimestamp()
-        }))
-      ]);
-    }
-
-    const notificationsRef = collection(db, 'foodai', 'admin', 'notifications');
-    const notificationData = buildPendingOrderNotification(orderData.id);
-    const notificationRef = doc(notificationsRef, notificationData.id);
-
-    await setDoc(notificationRef, removeUndefinedDeep({
-      ...notificationData,
-      serverTimestamp: serverTimestamp()
-    }));
-
-    console.log('[Firebase] Pedido e notificação salvos com sucesso!');
-    return true;
-  } catch (error) {
-    console.error('[Firebase] Erro ao salvar pedido:', error);
-    return false;
+  if (import.meta.env.DEV) {
+    const maskedPhone = (orderData.customer?.phone || orderData.customerPhone || '').replace(/\D/g, '');
+    console.log('[Firebase] Salvando pedido no tenant', {
+      tenantId: getTenantId(),
+      path: `deliveryuai/${getTenantId()}/orders/${orderData.id}`,
+      orderId: orderData.id,
+      customerPhoneMasked: maskedPhone ? `${maskedPhone.slice(0, 2)}***${maskedPhone.slice(-2)}` : ''
+    });
   }
+
+  return createTenantOrder(orderData);
 }
 
 
@@ -357,7 +226,7 @@ export async function getUserNotificationsFromFirebase(): Promise<AdminNotificat
   if (!IS_FIREBASE_ON) return [];
 
   try {
-    const notificationsRef = collection(db, 'foodai', 'admin', 'notifications');
+    const notificationsRef = notificationsCollectionRef(db);
     const snapshot = await getDocs(notificationsRef);
 
     return mapUserNotifications(
@@ -380,7 +249,7 @@ export function subscribeToUserNotifications(onChange: (notifications: AdminNoti
     return () => {};
   }
 
-  const notificationsRef = collection(db, 'foodai', 'admin', 'notifications');
+  const notificationsRef = notificationsCollectionRef(db);
 
   return onSnapshot(
     notificationsRef,
@@ -405,7 +274,7 @@ export async function clearUserNotificationsFromFirebase(notificationIds: string
   if (!IS_FIREBASE_ON || notificationIds.length === 0) return true;
 
   try {
-    const notificationsRef = collection(db, 'foodai', 'admin', 'notifications');
+    const notificationsRef = notificationsCollectionRef(db);
 
     await Promise.all(
       notificationIds.map((notificationId) => deleteDoc(doc(notificationsRef, notificationId)))
