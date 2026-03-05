@@ -6,7 +6,7 @@ import {
   Plus, Edit2, Trash2, X, Sparkles, RefreshCw, 
   Image as ImageIcon, Tag, List, PlusCircle, MinusCircle, DollarSign,
   Check, ChevronDown, Settings, Save, Search, LayoutGrid, Filter, ArrowUpDown,
-  TicketPercent, AlertTriangle, Bike, Pizza
+  TicketPercent, AlertTriangle, Bike
 } from 'lucide-react';
 import { INITIAL_CATEGORIES } from '../mockData';
 import PizzaConfiguratorModal from '../pizza/PizzaConfiguratorModal';
@@ -47,6 +47,7 @@ const MenuManager: React.FC = () => {
   const [isPizzaConfiguratorOpen, setIsPizzaConfiguratorOpen] = useState(false);
   const [editingPizzaBase, setEditingPizzaBase] = useState<MenuItem | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [newItemType, setNewItemType] = useState<'normal' | 'pizza'>('normal');
   const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
   
   // States para painel de gerenciamento global
@@ -123,6 +124,16 @@ const MenuManager: React.FC = () => {
         setFormData(p => ({ ...p, category: categories[0] }));
     }
   }, [categories]);
+
+
+  useEffect(() => {
+    if (!isModalOpen || editingId) return;
+    if (newItemType !== 'pizza') return;
+
+    setIsModalOpen(false);
+    setEditingPizzaBase(null);
+    setIsPizzaConfiguratorOpen(true);
+  }, [isModalOpen, editingId, newItemType]);
 
   const uniqueSorted = (values: string[]) => Array.from(
     new Map(values.map(value => [value.trim().toLowerCase(), value.trim()])).values()
@@ -380,6 +391,7 @@ const MenuManager: React.FC = () => {
       sizes: []
     });
     setEditingId(null);
+    setNewItemType('normal');
     setWizardStep(1);
     setIsAddingCategory(false);
     setNewCategoryName('');
@@ -877,16 +889,10 @@ const MenuManager: React.FC = () => {
                 <Settings size={18} /> <span className="hidden sm:inline">Global</span>
              </button>
              <button 
-               onClick={() => { resetForm(); setIsModalOpen(true); }} 
+               onClick={() => { resetForm(); setNewItemType('normal'); setIsModalOpen(true); }} 
                className="flex-1 xl:flex-initial flex items-center justify-center gap-2 bg-orange-500 text-white px-6 py-3 rounded-2xl font-black uppercase text-[10px] shadow-lg shadow-orange-500/20 hover:scale-105 active:scale-95 transition-all whitespace-nowrap"
              >
                <Plus size={18} /> <span className="inline">Novo</span>
-             </button>
-             <button 
-               onClick={() => { setEditingPizzaBase(null); setIsPizzaConfiguratorOpen(true); }} 
-               className="flex-1 xl:flex-initial flex items-center justify-center gap-2 bg-stone-900 text-white px-6 py-3 rounded-2xl font-black uppercase text-[10px] shadow-lg hover:scale-105 active:scale-95 transition-all whitespace-nowrap"
-             >
-               <Pizza size={18} /> <span className="inline">Configurar Pizza</span>
              </button>
           </div>
         </div>
@@ -973,14 +979,24 @@ const MenuManager: React.FC = () => {
               {/* Header: Fixo no topo */}
               <div className="flex justify-between items-center p-6 lg:px-12 lg:pt-12 lg:pb-6 border-b border-stone-100 dark:border-stone-800 bg-white dark:bg-stone-900 shrink-0 z-10">
                 <div>
-                  <h2 className="text-xl lg:text-2xl font-black uppercase tracking-tight text-stone-800 dark:text-white">Ficha Técnica do Prato</h2>
-                  <p className="text-sm text-stone-400 font-medium">{editingId ? 'Editando prato existente' : 'Criando novo prato para o cardápio'}</p>
+                  <h2 className="text-xl lg:text-2xl font-black uppercase tracking-tight text-stone-800 dark:text-white">{editingId ? 'Ficha Técnica do Prato' : 'Novo Item'}</h2>
+                  <p className="text-sm text-stone-400 font-medium">{editingId ? 'Editando prato existente' : 'Escolha o tipo do item para começar.'}</p>
                 </div>
                 <button onClick={() => setIsModalOpen(false)} className="p-2 lg:p-3 bg-stone-100 dark:bg-stone-800 rounded-2xl text-stone-400 hover:text-red-500 transition-all"><X size={20} className="lg:w-6 lg:h-6"/></button>
               </div>
 
               {/* Scrollable Content: Apenas o formulário rola */}
               <div className="flex-1 overflow-y-auto custom-scrollbar p-6 lg:px-12 space-y-10">
+                {!editingId && (
+                  <div className="rounded-2xl border border-stone-200 dark:border-stone-700 p-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-400 mb-2">Tipo do item</p>
+                    <div className="flex gap-2">
+                      <button onClick={() => setNewItemType('normal')} className={`px-4 py-2 rounded-xl text-xs font-black uppercase border ${newItemType === 'normal' ? 'bg-orange-500 text-white border-orange-500' : 'border-stone-200 text-stone-500'}`}>Normal</button>
+                      <button onClick={() => setNewItemType('pizza')} className={`px-4 py-2 rounded-xl text-xs font-black uppercase border ${newItemType === 'pizza' ? 'bg-stone-900 text-white border-stone-900' : 'border-stone-200 text-stone-500'}`}>Pizza</button>
+                    </div>
+                  </div>
+                )}
+
                 {formData.type === 'pizza' && (
                   <div className="rounded-3xl border border-orange-100 dark:border-orange-900/30 p-4 space-y-3">
                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-500">Configurador de Pizza</p>
@@ -1008,14 +1024,6 @@ const MenuManager: React.FC = () => {
                       <div className="space-y-2">
                         <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Nome do Prato</label>
                         <input value={formData.name} onChange={e => setFormData(p => ({...p, name: e.target.value}))} className="w-full bg-stone-50 dark:bg-stone-800 p-4 rounded-2xl border border-stone-200 dark:border-stone-700 font-bold outline-none focus:border-orange-500 dark:text-white" placeholder="Ex: Burger Supremo" />
-                      </div>
-
-                      <div className="space-y-2"> 
-                        <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Tipo do Item</label>
-                        <select value={formData.type} onChange={e => setFormData(p => ({ ...p, type: e.target.value as 'regular' | 'pizza' }))} className="w-full bg-stone-50 dark:bg-stone-800 p-4 rounded-2xl border border-stone-200 dark:border-stone-700 font-bold outline-none focus:border-orange-500 dark:text-white">
-                          <option value="regular">Produto comum</option>
-                          <option value="pizza">Pizza configurável</option>
-                        </select>
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
