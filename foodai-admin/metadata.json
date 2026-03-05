@@ -1,0 +1,8 @@
+{
+  "name": "Painel Administrativo White-Label",
+  "description": "A robust administrative panel for managing menu items, tracking real-time orders, and fine-tuning the AI waiter's behavior for your business.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
