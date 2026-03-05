@@ -10,9 +10,10 @@ import ItemDetailModal from '../../components/ItemDetailModal';
 import ProfileModal from '../../components/ProfileModal';
 import OrdersModal from '../../components/OrdersModal';
 import { MENU_ITEMS, CATEGORIES, IS_FIREBASE_ON } from '../../constants';
+import { useStorefrontData } from '../../hooks/useStorefrontData';
 import { AdminNotification, MenuItem, FilterType, CartItem, ExtraItem, CheckoutDetails, Category } from '../../types';
 import { askWaiter } from '../../services/geminiService';
-import { clearUserNotificationsFromFirebase, fetchCategoriesFromFirebase, fetchMenuFromFirebase, saveOrderToFirebase, subscribeToStoreSettingsFromFirebase, subscribeToUserNotifications, toFirebaseOrder } from '../../services/firebaseService';
+import { clearUserNotificationsFromFirebase, saveOrderToFirebase, subscribeToUserNotifications, toFirebaseOrder } from '../../services/firebaseService';
 
 interface AiSuggestion {
   itemId: string;
@@ -29,10 +30,12 @@ interface CheckoutSession {
 
 const CustomerApp: React.FC = () => {
   // Dados dinâmicos (Menu e Categorias)
-  const [menuItems, setMenuItems] = useState<MenuItem[]>(MENU_ITEMS);
-  const [categories, setCategories] = useState<Category[]>(CATEGORIES);
-  const [isLoadingData, setIsLoadingData] = useState(false);
-  const [deliveryFee, setDeliveryFee] = useState(5.90);
+  const { data: storefrontData, loading: isLoadingData, error: storefrontError } = useStorefrontData();
+  const menuItems = storefrontData.products.length > 0 ? storefrontData.products : MENU_ITEMS;
+  const categories = storefrontData.categories.length > 0 ? storefrontData.categories : CATEGORIES;
+  const deliveryFee = typeof storefrontData.deliverySettings?.deliveryFee === 'number'
+    ? storefrontData.deliverySettings.deliveryFee
+    : 5.90;
 
   // Estados de UI
   const [searchQuery, setSearchQuery] = useState('');
@@ -65,36 +68,6 @@ const CustomerApp: React.FC = () => {
     if (saved) return saved === 'dark';
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
-
-  // Efeito para carregar dados do Firebase ao iniciar
-  useEffect(() => {
-    if (IS_FIREBASE_ON) {
-      const loadFirebaseData = async () => {
-        setIsLoadingData(true);
-        const [fbMenu, fbCategories] = await Promise.all([
-          fetchMenuFromFirebase(),
-          fetchCategoriesFromFirebase()
-        ]);
-        
-        if (fbMenu) setMenuItems(fbMenu);
-        if (fbCategories) setCategories(fbCategories);
-        setIsLoadingData(false);
-      };
-      loadFirebaseData();
-    }
-  }, []);
-
-  useEffect(() => {
-    const unsubscribe = subscribeToStoreSettingsFromFirebase((storeSettings) => {
-      if (storeSettings?.deliveryFee !== undefined) {
-        setDeliveryFee(storeSettings.deliveryFee);
-      } else {
-        setDeliveryFee(5.90);
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
 
   useEffect(() => {
     localStorage.setItem('foodai-theme', darkMode ? 'dark' : 'light');
@@ -340,6 +313,12 @@ const CustomerApp: React.FC = () => {
     <div className="min-h-screen bg-white dark:bg-zinc-950 transition-colors duration-300 pb-44 text-zinc-900 dark:text-zinc-50 font-sans selection:bg-orange-100 selection:text-orange-900 overflow-x-hidden">
       
       {/* Loading Overlay for Firebase */}
+      {storefrontError && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[250] bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-200 px-4 py-2 rounded-xl text-sm font-semibold">
+          Erro ao carregar dados da loja: {storefrontError}
+        </div>
+      )}
+
       {isLoadingData && (
         <div className="fixed inset-0 z-[300] bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md flex flex-col items-center justify-center gap-4">
           <Loader2 size={40} className="text-orange-500 animate-spin" />
@@ -517,13 +496,19 @@ const CustomerApp: React.FC = () => {
         )}
 
         <section className="px-6 pt-4 space-y-12">
-           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-            {filteredItems.map((item, idx) => (
-              <div key={item.id} className="animate-in fade-in slide-in-from-bottom-10 duration-700" style={{ animationDelay: `${idx * 40}ms` }} onClick={() => openItemDetails(item)}>
-                <MenuCard item={item} onAdd={(i) => saveToCart(i, 1, [], [], "")} count={getItemCountInCart(item.id)} />
-              </div>
-            ))}
-          </div>
+           {filteredItems.length === 0 ? (
+            <div className="rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 p-8 text-center">
+              <p className="text-sm font-semibold text-zinc-600 dark:text-zinc-300">Nenhum item encontrado para este tenant.</p>
+            </div>
+           ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+              {filteredItems.map((item, idx) => (
+                <div key={item.id} className="animate-in fade-in slide-in-from-bottom-10 duration-700" style={{ animationDelay: `${idx * 40}ms` }} onClick={() => openItemDetails(item)}>
+                  <MenuCard item={item} onAdd={(i) => saveToCart(i, 1, [], [], "")} count={getItemCountInCart(item.id)} />
+                </div>
+              ))}
+            </div>
+           )}
         </section>
       </main>
 

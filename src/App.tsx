@@ -1,5 +1,5 @@
 import React from 'react';
-import CustomerApp from './modules/customer/CustomerApp';
+import ClientHome from './pages/ClientHome';
 import AdminApp from './modules/admin/App';
 
 const App: React.FC = () => {
@@ -9,7 +9,7 @@ const App: React.FC = () => {
     return <AdminApp />;
   }
 
-  return <CustomerApp />;
+  return <ClientHome />;
 };
 
 export default App;
