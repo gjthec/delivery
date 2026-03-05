@@ -34,7 +34,12 @@ export function useStorefrontData() {
         });
       } catch (err: unknown) {
         if (!mounted) return;
-        setError(err instanceof Error ? err.message : 'Erro ao carregar loja');
+        const message = err instanceof Error ? err.message : 'Erro ao carregar loja';
+        if (message.includes('The query requires an index')) {
+          setError('Configuração de índice do Firestore pendente. Aplicamos fallback temporário no localhost.');
+        } else {
+          setError(message);
+        }
         setData({
           ...EMPTY_DATA,
           products: MENU_ITEMS,
@@ -56,7 +61,12 @@ export function useStorefrontData() {
       },
       (snapshotError) => {
         if (!mounted) return;
-        setError(snapshotError.message || 'Erro ao sincronizar loja');
+        const message = snapshotError.message || 'Erro ao sincronizar loja';
+        if (message.includes('The query requires an index')) {
+          setError('Índice do Firestore ainda não foi criado. A loja segue com fallback temporário no localhost.');
+        } else {
+          setError(message);
+        }
       }
     );
 

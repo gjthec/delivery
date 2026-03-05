@@ -1,71 +1,39 @@
 import { collection, doc, Firestore } from 'firebase/firestore';
 import { getTenantId } from '../utils/tenant.util';
 
+const ROOT_COLLECTION = 'deliveryuai';
+
 export function tenantDocRef(db: Firestore) {
-  const tenantId = getTenantId();
-  return doc(db, 'deliveryuai', tenantId);
-}
-
-export function adminCollectionRef(db: Firestore) {
-  const tenantId = getTenantId();
-  return collection(db, 'deliveryuai', tenantId, 'admin');
-}
-
-export function userCollectionRef(db: Firestore) {
-  const tenantId = getTenantId();
-  return collection(db, 'deliveryuai', tenantId, 'user');
+  return doc(db, ROOT_COLLECTION, getTenantId());
 }
 
 export function tenantCollection(db: Firestore, collectionName: string) {
-  const tenantId = getTenantId();
-  return collection(db, 'deliveryuai', tenantId, collectionName);
+  return collection(db, ROOT_COLLECTION, getTenantId(), collectionName);
 }
 
 export function tenantDoc(db: Firestore, collectionName: string, docId: string) {
-  const tenantId = getTenantId();
-  return doc(db, 'deliveryuai', tenantId, collectionName, docId);
+  return doc(db, ROOT_COLLECTION, getTenantId(), collectionName, docId);
 }
 
-export function productsCollectionRef(db: Firestore) {
-  return tenantCollection(db, 'products');
-}
+export const adminCollectionRef = (db: Firestore) => tenantCollection(db, 'admin');
+export const userCollectionRef = (db: Firestore) => tenantCollection(db, 'user');
+export const productsCollectionRef = (db: Firestore) => tenantCollection(db, 'products');
+export const categoriesCollectionRef = (db: Firestore) => tenantCollection(db, 'categories');
+export const bannersCollectionRef = (db: Firestore) => tenantCollection(db, 'banners');
+export const couponsCollectionRef = (db: Firestore) => tenantCollection(db, 'coupons');
 
-export function categoriesCollectionRef(db: Firestore) {
-  return tenantCollection(db, 'categories');
-}
+// Compatibilidade com dados antigos do cardápio.
+export const menuCollectionRef = (db: Firestore) => tenantCollection(db, 'menu');
 
-export function bannersCollectionRef(db: Firestore) {
-  return tenantCollection(db, 'banners');
-}
-
-export function menuCollectionRef(db: Firestore) {
-  return tenantCollection(db, 'menu');
-}
-
-export function couponsCollectionRef(db: Firestore) {
-  return tenantCollection(db, 'coupons');
-}
-
-export function settingsDocRef(db: Firestore) {
-  return tenantDoc(db, 'settings', 'general');
-}
-
-export function storeSettingsDocRef(db: Firestore) {
-  return tenantDoc(db, 'settings', 'store');
-}
-
-export function businessDocRef(db: Firestore) {
-  return tenantDoc(db, 'business', 'info');
-}
-
-export function deliverySettingsDocRef(db: Firestore) {
-  return tenantDoc(db, 'deliverySettings', 'general');
-}
+export const settingsDocRef = (db: Firestore) => tenantDoc(db, 'settings', 'general');
+export const storeSettingsDocRef = (db: Firestore) => tenantDoc(db, 'settings', 'store');
+export const businessDocRef = (db: Firestore) => tenantDoc(db, 'business', 'info');
+export const deliverySettingsDocRef = (db: Firestore) => tenantDoc(db, 'deliverySettings', 'general');
 
 export function tenantPathSegments() {
-  return ['deliveryuai', getTenantId()] as const;
+  return [ROOT_COLLECTION, getTenantId()] as const;
 }
 
 export function tenantCollectionPath(collectionName: string) {
-  return ['deliveryuai', getTenantId(), collectionName] as const;
+  return [ROOT_COLLECTION, getTenantId(), collectionName] as const;
 }
