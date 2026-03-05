@@ -33,13 +33,21 @@ export interface PizzaSizeOption {
   slices?: number | null;
 }
 
+export interface Ingredient {
+  id: string;
+  name: string;
+  active: boolean;
+  tags: string[];
+  allergens?: string[] | null;
+}
+
 export interface PizzaFlavor {
   id: string;
   name: string;
   description?: string | null;
   imageUrl?: string | null;
   tags: string[];
-  ingredients: string[];
+  ingredients: Array<{ id: string; name: string }>;
   active: boolean;
   priceDeltaBySize?: Record<string, number> | null;
 }
@@ -51,6 +59,12 @@ export interface OrderItemPizzaFlavor {
   priceDeltaApplied: number;
 }
 
+export interface OrderItemPizzaSegment {
+  index: number;
+  flavorId: string;
+  flavorName: string;
+}
+
 export interface OrderItemPizza {
   kind: 'pizza';
   pizzaBaseId: string;
@@ -60,7 +74,8 @@ export interface OrderItemPizza {
   maxFlavors: number;
   flavorCountSelected: number;
   pricingStrategyUsed: PizzaPricingStrategy;
-  flavors: OrderItemPizzaFlavor[];
+  segments: OrderItemPizzaSegment[];
+  ingredientsSummary: string[];
   unitPriceComputed: number;
   quantity: number;
   notes?: string | null;

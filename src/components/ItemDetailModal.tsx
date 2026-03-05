@@ -24,6 +24,8 @@ interface Props {
   }) => void;
 }
 
+const PIZZA_COLORS = ['#f97316', '#0ea5e9', '#22c55e', '#a855f7'];
+
 const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData, isOpen, onClose, onAddToCart }) => {
   const [quantity, setQuantity] = useState(1);
   const [removedIngredients, setRemovedIngredients] = useState<string[]>([]);
@@ -32,10 +34,11 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
 
   const [selectedSizeId, setSelectedSizeId] = useState('');
   const [flavorCountSelected, setFlavorCountSelected] = useState(1);
-  const [selectedFlavorIds, setSelectedFlavorIds] = useState<string[]>([]);
+  const [segmentFlavorIds, setSegmentFlavorIds] = useState<string[]>([]);
+  const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
   const [flavorSearch, setFlavorSearch] = useState('');
   const [pizzaWarning, setPizzaWarning] = useState('');
-  const [showIngredients, setShowIngredients] = useState<Record<string, boolean>>({});
+  const [showIngredientDetails, setShowIngredientDetails] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -44,14 +47,14 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
     setSelectedExtras(initialData?.selectedExtras || []);
     setObservations(initialData?.observations || '');
 
-    const initialPizza = initialData?.pizzaConfig;
-    setSelectedSizeId(initialPizza?.sizeId || '');
-    const initialFlavors = initialPizza?.flavors?.map((f) => f.id) || [];
-    setSelectedFlavorIds(initialFlavors);
-    setFlavorCountSelected(Math.max(1, initialPizza?.flavorCountSelected || initialFlavors.length || 1));
+    const pizzaConfig = initialData?.pizzaConfig;
+    setSelectedSizeId(pizzaConfig?.sizeId || '');
+    setFlavorCountSelected(Math.max(1, pizzaConfig?.flavorCountSelected || pizzaConfig?.segments?.length || 1));
+    setSegmentFlavorIds((pizzaConfig?.segments || []).map((segment) => segment.flavorId));
+    setActiveSegmentIndex(0);
     setFlavorSearch('');
     setPizzaWarning('');
-    setShowIngredients({});
+    setShowIngredientDetails(false);
   }, [isOpen, initialData, item]);
 
   const isPizza = item?.type === 'pizza';
@@ -59,17 +62,18 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
   const maxFlavorsAllowed = selectedSize?.maxFlavors || 1;
 
   const availablePizzaFlavors = useMemo(() => {
-    const q = flavorSearch.trim().toLowerCase();
+    const query = flavorSearch.trim().toLowerCase();
     return pizzaFlavors
-      .filter((f) => f.active)
-      .filter((f) => !q || f.name.toLowerCase().includes(q) || f.tags.some((tag) => tag.toLowerCase().includes(q)));
+      .filter((flavor) => flavor.active)
+      .filter((flavor) => !query || flavor.name.toLowerCase().includes(query) || flavor.tags.some((tag) => tag.toLowerCase().includes(query)));
   }, [pizzaFlavors, flavorSearch]);
 
   const selectedFlavors = useMemo(() => {
-    return selectedFlavorIds
-      .map((id) => pizzaFlavors.find((flavor) => flavor.id === id))
+    return segmentFlavorIds
+      .slice(0, flavorCountSelected)
+      .map((flavorId) => pizzaFlavors.find((flavor) => flavor.id === flavorId))
       .filter((flavor): flavor is PizzaFlavor => Boolean(flavor));
-  }, [selectedFlavorIds, pizzaFlavors]);
+  }, [segmentFlavorIds, flavorCountSelected, pizzaFlavors]);
 
   const pizzaUnitPrice = useMemo(() => {
     if (!item || !isPizza || !selectedSizeId || selectedFlavors.length === 0) return item?.price || 0;
@@ -85,16 +89,16 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
 
   if (!item) return null;
 
-  const updateFlavorSlot = (slotIndex: number, flavorId: string) => {
-    setSelectedFlavorIds((prev) => {
+  const updateSegmentFlavor = (segmentIndex: number, flavorId: string) => {
+    setSegmentFlavorIds((prev) => {
       const next = [...prev];
-      const duplicateIndex = next.findIndex((id, idx) => id === flavorId && idx !== slotIndex);
-      if (duplicateIndex >= 0) {
-        setPizzaWarning('Não é permitido repetir sabores.');
+      const duplicate = next.some((id, idx) => id === flavorId && idx !== segmentIndex);
+      if (duplicate) {
+        setPizzaWarning('Sabores devem ser distintos.');
         return prev;
       }
 
-      next[slotIndex] = flavorId;
+      next[segmentIndex] = flavorId;
       setPizzaWarning('');
       return next.slice(0, flavorCountSelected);
     });
@@ -106,38 +110,34 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
     if (!nextSize) return;
 
     setSelectedSizeId(sizeId);
-    setFlavorCountSelected((prev) => {
-      if (prev <= nextSize.maxFlavors) return prev;
-      setPizzaWarning(`Quantidade de sabores ajustada para ${nextSize.maxFlavors} ao trocar o tamanho.`);
-      return nextSize.maxFlavors;
-    });
-    setSelectedFlavorIds((prev) => prev.slice(0, nextSize.maxFlavors));
+    setFlavorCountSelected((prev) => Math.min(prev, nextSize.maxFlavors));
+    setSegmentFlavorIds((prev) => prev.slice(0, nextSize.maxFlavors));
   };
 
   const handleFlavorCountChange = (count: number) => {
     const bounded = Math.max(1, Math.min(count, maxFlavorsAllowed));
     setFlavorCountSelected(bounded);
-    setSelectedFlavorIds((prev) => prev.slice(0, bounded));
+    setSegmentFlavorIds((prev) => prev.slice(0, bounded));
+    if (activeSegmentIndex >= bounded) setActiveSegmentIndex(0);
   };
 
+  const segments = Array.from({ length: flavorCountSelected }, (_, index) => ({
+    index,
+    flavorId: segmentFlavorIds[index] || '',
+    flavor: pizzaFlavors.find((flavor) => flavor.id === segmentFlavorIds[index]) || null
+  }));
 
-  const toggleIngredient = (ingredient: string) => {
-    setRemovedIngredients((prev) => prev.includes(ingredient)
-      ? prev.filter((current) => current !== ingredient)
-      : [...prev, ingredient]);
-  };
+  const pizzaConicStyle = {
+    background: segments.length === 1
+      ? PIZZA_COLORS[0]
+      : `conic-gradient(${segments.map((segment, index) => `${PIZZA_COLORS[index % PIZZA_COLORS.length]} ${Math.round((index / segments.length) * 360)}deg ${Math.round(((index + 1) / segments.length) * 360)}deg`).join(', ')})`
+  } as React.CSSProperties;
 
-  const toggleExtra = (extra: ExtraItem) => {
-    setSelectedExtras((prev) => prev.some((current) => current.name === extra.name)
-      ? prev.filter((current) => current.name !== extra.name)
-      : [...prev, extra]);
-  };
+  const ingredientsSummary = Array.from(new Set(selectedFlavors.flatMap((flavor) => flavor.ingredients.map((ingredient) => ingredient.name))));
 
   const isPizzaReady = Boolean(selectedSizeId)
-    && selectedFlavorIds.length === flavorCountSelected
-    && selectedFlavorIds.every(Boolean);
-
-  const canAddPizza = !isPizza || isPizzaReady;
+    && segments.length === flavorCountSelected
+    && segments.every((segment) => Boolean(segment.flavorId));
 
   const handleAdd = () => {
     if (isPizza && item && selectedSize) {
@@ -150,12 +150,12 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
         maxFlavors: selectedSize.maxFlavors,
         flavorCountSelected,
         pricingStrategyUsed: item.pricingStrategy || 'highestFlavor',
-        flavors: selectedFlavors.map((flavor) => ({
-          id: flavor.id,
-          name: flavor.name,
-          ingredients: flavor.ingredients || [],
-          priceDeltaApplied: flavor.priceDeltaBySize?.[selectedSize.id] || 0
+        segments: segments.map((segment) => ({
+          index: segment.index,
+          flavorId: segment.flavorId,
+          flavorName: segment.flavor?.name || ''
         })),
+        ingredientsSummary,
         unitPriceComputed: pizzaUnitPrice
       };
 
@@ -167,8 +167,6 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
     onAddToCart({ removedIngredients, selectedExtras, observations, quantity });
     onClose();
   };
-
-  const consolidatedIngredients = Array.from(new Set(selectedFlavors.flatMap((f) => f.ingredients || [])));
 
   return (
     <div className={`fixed inset-0 z-[200] flex items-end justify-center transition-all duration-500 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
@@ -190,7 +188,7 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
           {isPizza && (
             <>
               <div>
-                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400 mb-3">Etapa 1: Tamanho</h3>
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400 mb-3">Tamanho</h3>
                 <div className="grid grid-cols-2 gap-3">
                   {(item.sizes || []).map((size) => (
                     <button key={size.id} onClick={() => handleSizeChange(size.id)} className={`p-4 rounded-2xl border-2 text-left ${selectedSizeId === size.id ? 'border-orange-500 bg-orange-50/40 dark:bg-orange-500/10' : 'border-zinc-200 dark:border-zinc-800'}`}>
@@ -202,107 +200,62 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
               </div>
 
               <div>
-                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400 mb-3">Etapa 2: Quantidade de sabores</h3>
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400 mb-3">Quantidade de sabores</h3>
                 <div className="flex gap-2 flex-wrap">
-                  {Array.from({ length: maxFlavorsAllowed }, (_, idx) => idx + 1).map((count) => (
-                    <button
-                      key={count}
-                      onClick={() => handleFlavorCountChange(count)}
-                      className={`px-4 py-2 rounded-xl border-2 text-xs font-black ${flavorCountSelected === count ? 'border-orange-500 text-orange-600 bg-orange-50/50' : 'border-zinc-200 dark:border-zinc-800 text-zinc-500'}`}
-                    >
+                  {Array.from({ length: maxFlavorsAllowed }, (_, i) => i + 1).map((count) => (
+                    <button key={count} onClick={() => handleFlavorCountChange(count)} className={`px-4 py-2 rounded-xl border-2 text-xs font-black ${flavorCountSelected === count ? 'border-orange-500 text-orange-600 bg-orange-50/50' : 'border-zinc-200 dark:border-zinc-800 text-zinc-500'}`}>
                       {count} sabor{count > 1 ? 'es' : ''}
                     </button>
                   ))}
                 </div>
               </div>
 
-              <div>
-                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400 mb-3">Etapa 3: Escolher sabores</h3>
-                <input
-                  value={flavorSearch}
-                  onChange={(e) => setFlavorSearch(e.target.value)}
-                  placeholder="Buscar sabor por nome/tag"
-                  className="w-full mb-3 bg-zinc-50 dark:bg-zinc-900 rounded-2xl p-3 text-sm"
-                />
-
-                <div className="space-y-3">
-                  {Array.from({ length: flavorCountSelected }, (_, slotIndex) => {
-                    const selectedFlavorId = selectedFlavorIds[slotIndex] || '';
-                    const selectedFlavor = pizzaFlavors.find((f) => f.id === selectedFlavorId);
-                    return (
-                      <div key={`slot-${slotIndex}`} className="p-3 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/40">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Sabor {slotIndex + 1}</label>
-                        <select
-                          value={selectedFlavorId}
-                          onChange={(e) => updateFlavorSlot(slotIndex, e.target.value)}
-                          className="w-full mt-2 bg-zinc-50 dark:bg-zinc-900 rounded-xl p-3 text-sm"
-                        >
-                          <option value="">Selecione um sabor</option>
-                          {availablePizzaFlavors.map((flavor) => (
-                            <option key={flavor.id} value={flavor.id}>{flavor.name}</option>
-                          ))}
-                        </select>
-
-                        {selectedFlavor && (
-                          <button
-                            type="button"
-                            onClick={() => setShowIngredients((prev) => ({ ...prev, [selectedFlavor.id]: !prev[selectedFlavor.id] }))}
-                            className="mt-2 text-[11px] font-bold text-zinc-500 flex items-center gap-1"
-                          >
-                            Ingredientes do sabor <ChevronDown size={12} className={showIngredients[selectedFlavor.id] ? 'rotate-180' : ''} />
-                          </button>
-                        )}
-                        {selectedFlavor && showIngredients[selectedFlavor.id] && (
-                          <p className="text-[11px] text-zinc-500 mt-1">{selectedFlavor.ingredients?.join(', ') || 'Sem ingredientes informados.'}</p>
-                        )}
-                      </div>
-                    );
-                  })}
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="rounded-3xl border border-zinc-200 dark:border-zinc-800 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-3">Preview da pizza</p>
+                  <div className="mx-auto w-44 h-44 rounded-full border-4 border-zinc-200 dark:border-zinc-700 relative" style={pizzaConicStyle}>
+                    {segments.map((segment, index) => (
+                      <button
+                        key={segment.index}
+                        onClick={() => setActiveSegmentIndex(index)}
+                        className={`absolute text-[10px] font-black px-2 py-1 rounded-full bg-white/90 text-zinc-700 ${activeSegmentIndex === index ? 'ring-2 ring-orange-500' : ''}`}
+                        style={{ left: `${50 + 34 * Math.cos(((index + 0.5) / segments.length) * Math.PI * 2 - Math.PI / 2)}%`, top: `${50 + 34 * Math.sin(((index + 0.5) / segments.length) * Math.PI * 2 - Math.PI / 2)}%`, transform: 'translate(-50%, -50%)' }}
+                      >
+                        {segment.flavor?.name || `Fatia ${index + 1}`}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                {pizzaWarning && <p className="text-xs text-orange-600 font-bold mt-2">{pizzaWarning}</p>}
+
+                <div className="rounded-3xl border border-zinc-200 dark:border-zinc-800 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-3">Selecionar sabor da fatia {activeSegmentIndex + 1}</p>
+                  <input value={flavorSearch} onChange={(e) => setFlavorSearch(e.target.value)} placeholder="Buscar sabor/tag" className="w-full mb-2 bg-zinc-50 dark:bg-zinc-900 rounded-xl p-3 text-sm" />
+                  <div className="max-h-44 overflow-y-auto space-y-2">
+                    {availablePizzaFlavors.map((flavor) => (
+                      <button key={flavor.id} onClick={() => updateSegmentFlavor(activeSegmentIndex, flavor.id)} className="w-full p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 text-left text-sm font-bold hover:border-orange-400">
+                        {flavor.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
+
+              {pizzaWarning && <p className="text-xs text-orange-600 font-bold">{pizzaWarning}</p>}
 
               <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
                 <p className="text-xs font-black uppercase tracking-widest text-zinc-400">Resumo</p>
-                <p className="text-sm font-bold text-zinc-700 dark:text-zinc-200 mt-1">{selectedSize ? `${selectedSize.label} • ${selectedFlavors.map((f) => f.name).join(', ')}` : 'Selecione o tamanho e sabores'}</p>
-                {consolidatedIngredients.length > 0 && (
-                  <p className="text-[11px] text-zinc-500 mt-1">Ingredientes: {consolidatedIngredients.join(', ')}</p>
-                )}
+                <p className="text-sm font-bold text-zinc-700 dark:text-zinc-200 mt-1">{selectedSize ? `${selectedSize.label} • ${segments.map((segment) => segment.flavor?.name || '---').join(' | ')}` : 'Selecione o tamanho e os sabores'}</p>
+                <button className="mt-2 text-[11px] text-zinc-500 flex items-center gap-1" onClick={() => setShowIngredientDetails((prev) => !prev)}>
+                  Ingredientes consolidados <ChevronDown size={12} className={showIngredientDetails ? 'rotate-180' : ''} />
+                </button>
+                {showIngredientDetails && <p className="text-[11px] text-zinc-500 mt-1">{ingredientsSummary.join(', ') || 'Nenhum ingrediente selecionado.'}</p>}
               </div>
             </>
           )}
 
           {!isPizza && (
-            <>
-              {item.ingredients && item.ingredients.length > 0 && (
-                <div>
-                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400 mb-3">Retirar ingredientes</h3>
-                  <div className="grid grid-cols-2 gap-2">
-                    {item.ingredients.map((ingredient) => (
-                      <button key={ingredient} onClick={() => toggleIngredient(ingredient)} className={`px-3 py-2 rounded-xl border text-xs font-bold ${removedIngredients.includes(ingredient) ? 'border-orange-500 text-orange-600' : 'border-zinc-200 dark:border-zinc-800 text-zinc-500'}`}>{ingredient}</button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {item.extras && item.extras.length > 0 && (
-                <div>
-                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400 mb-3">Adicionais</h3>
-                  <div className="space-y-2">
-                    {item.extras.map((extra) => (
-                      <button key={extra.name} onClick={() => toggleExtra(extra)} className={`w-full p-3 rounded-xl border text-left text-sm font-bold flex justify-between ${selectedExtras.some((current) => current.name === extra.name) ? 'border-orange-500 text-orange-600' : 'border-zinc-200 dark:border-zinc-800 text-zinc-500'}`}>
-                        <span>{extra.name}</span>
-                        <span>+ R$ {extra.price.toFixed(2)}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-            </>
+            <textarea value={observations} onChange={(e) => setObservations(e.target.value)} placeholder="Observações" className="w-full bg-zinc-50 dark:bg-zinc-900 rounded-2xl p-4 text-sm" />
           )}
-
-          <textarea value={observations} onChange={(e) => setObservations(e.target.value)} placeholder="Observações" className="w-full bg-zinc-50 dark:bg-zinc-900 rounded-2xl p-4 text-sm" />
         </div>
 
         <div className="absolute bottom-0 left-0 right-0 p-6 bg-white/90 dark:bg-zinc-950/90 border-t border-zinc-100 dark:border-zinc-800 z-50 flex items-center gap-4">
@@ -312,7 +265,7 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
             <button onClick={() => setQuantity(quantity + 1)} className="w-12 h-12 flex items-center justify-center"><PlusCircle size={22} /></button>
           </div>
 
-          <button disabled={!canAddPizza} onClick={handleAdd} className="flex-1 py-5 orange-gradient text-white rounded-[2.2rem] font-black flex items-center justify-between px-6 disabled:opacity-50 disabled:cursor-not-allowed">
+          <button disabled={isPizza ? !isPizzaReady : false} onClick={handleAdd} className="flex-1 py-5 orange-gradient text-white rounded-[2.2rem] font-black flex items-center justify-between px-6 disabled:opacity-50 disabled:cursor-not-allowed">
             <div className="flex items-center gap-2">
               {initialData ? <RefreshCw size={20} /> : <ShoppingBag size={20} />}
               <span className="uppercase tracking-widest text-[10px]">{initialData ? 'Atualizar' : 'Adicionar ao carrinho'}</span>

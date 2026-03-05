@@ -7,7 +7,7 @@ import { AdminNotification, CartItem, CheckoutDetails, ExtraItem, MenuItem, Orde
 import { generateOrderId, calculateCartTotal, processOrderToDatabase, sendWhatsAppMessage } from '../services/order-flow.service';
 import { AiSuggestion, CheckoutSession } from '../types/customer-app.types';
 import { useCustomerMenuItems } from './useCustomerMenuItems';
-import { getActivePizzaFlavors } from '../services/pizza.service';
+import { listPizzaFlavors } from '../services/pizza.service';
 
 export function useCustomerAppController() {
   const { data: storefrontData, loading: isLoadingData, error: storefrontError } = useStorefrontData();
@@ -71,8 +71,8 @@ export function useCustomerAppController() {
 
 
   useEffect(() => {
-    getActivePizzaFlavors()
-      .then(setPizzaFlavors)
+    listPizzaFlavors()
+      .then((flavors) => setPizzaFlavors(flavors.filter((flavor) => flavor.active)))
       .catch(() => setPizzaFlavors([]));
   }, []);
 

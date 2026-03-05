@@ -465,7 +465,7 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
                               </div>
                               <p className="text-[10px] text-zinc-400 font-bold truncate">
                                 {cartItem.pizzaConfig
-                                  ? `${cartItem.pizzaConfig.sizeLabel} • ${cartItem.pizzaConfig.flavors.map((f) => f.name).join(', ')}`
+                                  ? `${cartItem.pizzaConfig.sizeLabel} • ${cartItem.pizzaConfig.segments.map((segment) => segment.flavorName).join(', ')}`
                                   : `${cartItem.selectedExtras.length > 0 ? `+ ${cartItem.selectedExtras.map(e => e.name).join(', ')}` : ''}${cartItem.removedIngredients.length > 0 ? ` (sem ${cartItem.removedIngredients.join(', ')})` : ''}`}
                               </p>
                             </div>

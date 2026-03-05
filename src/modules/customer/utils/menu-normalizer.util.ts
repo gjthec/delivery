@@ -79,6 +79,22 @@ function normalizePricingStrategy(value: unknown): PizzaPricingStrategy {
 }
 
 
+
+function normalizeFlavorIngredients(value: unknown): Array<{ id: string; name: string }> {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((ingredient) => {
+      if (!ingredient || typeof ingredient !== 'object') return null;
+      const payload = ingredient as Record<string, unknown>;
+      const id = String(payload.id ?? '').trim();
+      const name = String(payload.name ?? '').trim();
+      if (!id || !name) return null;
+      return { id, name };
+    })
+    .filter((item): item is { id: string; name: string } => Boolean(item));
+}
+
 function normalizePriceDeltaBySize(value: unknown): Record<string, number> | null {
   if (!value || typeof value !== 'object') return null;
 
@@ -107,7 +123,7 @@ export function normalizePizzaFlavor(raw: unknown, fallbackId?: string) {
     imageUrl: payload.imageUrl ? String(payload.imageUrl) : null,
     active: typeof payload.active === 'boolean' ? payload.active : true,
     tags: toStringArray(payload.tags),
-    ingredients: toStringArray(payload.ingredients),
+    ingredients: normalizeFlavorIngredients(payload.ingredients),
     priceDeltaBySize: normalizePriceDeltaBySize(payload.priceDeltaBySize)
   };
 }

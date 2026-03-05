@@ -17,13 +17,21 @@ export interface PizzaSizeOption {
   slices?: number | null;
 }
 
+export interface Ingredient {
+  id: string;
+  name: string;
+  active: boolean;
+  tags: string[];
+  allergens?: string[] | null;
+}
+
 export interface PizzaFlavor {
   id: string;
   name: string;
   description?: string | null;
   imageUrl?: string | null;
   tags: string[];
-  ingredients: string[];
+  ingredients: Array<{ id: string; name: string }>;
   active: boolean;
   priceDeltaBySize?: Record<string, number> | null;
 }
