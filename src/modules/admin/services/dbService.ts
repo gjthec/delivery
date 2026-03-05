@@ -1,6 +1,7 @@
 import { IS_FIREBASE_ENABLED, firebaseConfig } from './config';
 import { MenuItem, Order, Combo, SalesInsights, SavedInsight, OrderStatus, AdminNotification, OrderNotificationEvent, Coupon, StoreSettings } from '../types';
 import { initializeApp } from 'firebase/app';
+import { tenantPathSegments } from '../../../firebase/firestore-paths';
 import {
   getFirestore,
   collection,
@@ -30,7 +31,7 @@ if (IS_FIREBASE_ENABLED && firebaseConfig.apiKey !== 'SUA_API_KEY' && firebaseCo
 }
 
 // Caminho raiz para organização dos dados
-const ROOT_PATH = ['platform', 'admin'];
+const ROOT_PATH = tenantPathSegments();
 
 // Helper para remover campos 'undefined' que o Firestore não aceita
 const sanitizeData = (obj: any): any => {
@@ -257,7 +258,7 @@ const buildUserOrderPath = (order: Pick<Order, 'customerPhone' | 'userId'>) => {
   const phone = order.customerPhone?.toString().trim() || order.userId?.toString().trim();
   if (!phone) return null;
 
-  return ['platform', 'user', phone, 'profile', 'orders'] as const;
+  return ['deliveryuai', ROOT_PATH[1], 'user', phone, 'profile', 'orders'] as const;
 };
 
 const orderStatusNotificationCopy: Record<Exclude<OrderStatus, 'pending'>, { title: string; message: (orderId: string) => string; event: OrderNotificationEvent }> = {
