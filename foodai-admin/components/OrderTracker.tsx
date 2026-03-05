@@ -8,6 +8,7 @@ import {
   PlusCircle, Play, X, User, MapPin, CreditCard, ShoppingBag,
   ChevronRight, Minus, Plus, Trash2, Utensils
 } from 'lucide-react';
+import { LucideIcon } from 'lucide-react';
 
 interface OrderTrackerProps {
   externalSelectedOrderId?: string | null;
@@ -22,7 +23,7 @@ const statusLabels: Record<OrderStatus, string> = {
   cancelled: 'Cancelado',
 };
 
-const statusColors: Record<OrderStatus, { bg: string, text: string, icon: any }> = {
+const statusColors: Record<OrderStatus, { bg: string, text: string, icon: LucideIcon }> = {
   pending: { bg: 'bg-amber-500/10', text: 'text-amber-600', icon: Clock },
   preparing: { bg: 'bg-blue-500/10', text: 'text-blue-600', icon: Play },
   shipping: { bg: 'bg-purple-500/10', text: 'text-purple-600', icon: Truck },

@@ -2,12 +2,12 @@
 import React, { useState, useEffect } from 'react';
 import { getSalesInsights } from '../services/aiService';
 import { dbInsights, dbOrders } from '../services/dbService';
-import { SalesInsights as SalesInsightsType, SavedInsight } from '../types';
+import { SalesInsightsData, SavedInsight } from '../types';
 import { TrendingUp, RefreshCw, History, Calendar, Trash2, AlertCircle } from 'lucide-react';
 
 const SalesInsights: React.FC = () => {
   const [loading, setLoading] = useState(false);
-  const [insights, setInsights] = useState<SalesInsightsType | null>(null);
+  const [insights, setInsights] = useState<SalesInsightsData | null>(null);
   const [history, setHistory] = useState<SavedInsight[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,9 +29,9 @@ const SalesInsights: React.FC = () => {
       setInsights(result);
       await dbInsights.save(result);
       loadHistory();
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("Erro ao gerar insights:", e);
-      if (e.message?.includes('429') || e.message?.includes('quota')) {
+      if (e instanceof Error && (e.message?.includes('429') || e.message?.includes('quota'))) {
         setError("Limite de cota atingido. Por favor, aguarde um minuto e tente novamente.");
       } else {
         setError("Ocorreu um erro ao processar os dados com IA.");

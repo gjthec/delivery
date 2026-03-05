@@ -1,11 +1,22 @@
 
 import React, { useState } from 'react';
+import { AppTab } from '../types';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { DollarSign, ShoppingBag, Users, Star, TrendingUp, ArrowUpRight, Clock, ChevronRight, Package, ChevronUp } from 'lucide-react';
 
 interface DashboardProps {
-  setActiveTab: (tab: string) => void;
+  setActiveTab: (tab: AppTab) => void;
 }
+
+type CategorySalesItem = {
+  name: string;
+  value: number;
+  color: string;
+  percent: string;
+  lucro: number;
+  quantidade: number;
+  receita: number;
+};
 
 const data = [
   { name: 'Seg', vendas: 4000, pedidos: 240 },
@@ -17,14 +28,14 @@ const data = [
   { name: 'Dom', vendas: 7490, pedidos: 480 },
 ];
 
-const categorySales = [
+const categorySales: CategorySalesItem[] = [
   { name: 'Hambúrgueres', value: 450, color: '#FB923C', percent: '45%', lucro: 2450.00, quantidade: 450, receita: 11205.00 },
   { name: 'Pizzas', value: 300, color: '#F87171', percent: '25%', lucro: 1800.00, quantidade: 300, receita: 8900.50 },
   { name: 'Saudáveis', value: 200, color: '#4ADE80', percent: '18%', lucro: 950.00, quantidade: 200, receita: 4500.00 },
   { name: 'Bebidas', value: 150, color: '#60A5FA', percent: '12%', lucro: 600.00, quantidade: 150, receita: 2100.00 },
 ];
 
-const CustomPieTooltip = ({ active, payload }: any) => {
+const CustomPieTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ payload: CategorySalesItem }> }) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     return (
@@ -56,7 +67,7 @@ const CustomPieTooltip = ({ active, payload }: any) => {
 const Dashboard: React.FC<DashboardProps> = ({ setActiveTab }) => {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
-  const onPieEnter = (_: any, index: number) => {
+  const onPieEnter = (_: unknown, index: number) => {
     setActiveIndex(index);
   };
 

@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { MenuItem } from '../types';
+import { MenuItem, AiWaiterResponse } from '../types';
 
 const getAI = () => {
   if (!process.env.API_KEY) {
@@ -13,7 +13,7 @@ export const testAiWaiter = async (
   userMessage: string,
   systemPrompt: string,
   menu: MenuItem[]
-) => {
+): Promise<AiWaiterResponse> => {
   const ai = getAI();
   
   const menuContext = menu.map(item => ({
@@ -57,6 +57,6 @@ export const testAiWaiter = async (
     return JSON.parse(response.text || '{}');
   } catch (e) {
     console.error("Failed to parse AI response", e);
-    return { reply: response.text, suggestions: [] };
+    return { reply: response.text || '', suggestions: [] };
   }
 };
