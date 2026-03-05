@@ -1,18 +1,18 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Sparkles, Filter, X, ShoppingBag, ChefHat, ArrowRight, CheckCircle2, Star, Wand2, Wallet, Leaf, Zap, History, Loader2, User, Home, Bell, Tag, MapPin, Truck, UtensilsCrossed, PackageCheck, Copy, QrCode, Plus, Clock } from 'lucide-react';
-import Header from './components/Header';
-import MenuCard from './components/MenuCard';
-import CartDrawer from './components/CartDrawer';
-import PixPaymentModal from './components/PixPaymentModal';
-import CategoryIcon from './components/CategoryIcon';
-import ItemDetailModal from './components/ItemDetailModal';
-import ProfileModal from './components/ProfileModal';
-import OrdersModal from './components/OrdersModal';
-import { MENU_ITEMS, CATEGORIES, IS_FIREBASE_ON } from './constants';
-import { AdminNotification, MenuItem, FilterType, CartItem, ExtraItem, CheckoutDetails, Category } from './types';
-import { askWaiter } from './services/geminiService';
-import { clearUserNotificationsFromFirebase, fetchCategoriesFromFirebase, fetchMenuFromFirebase, saveOrderToFirebase, subscribeToStoreSettingsFromFirebase, subscribeToUserNotifications, toFirebaseOrder } from './services/firebaseService';
+import Header from '../../components/Header';
+import MenuCard from '../../components/MenuCard';
+import CartDrawer from '../../components/CartDrawer';
+import PixPaymentModal from '../../components/PixPaymentModal';
+import CategoryIcon from '../../components/CategoryIcon';
+import ItemDetailModal from '../../components/ItemDetailModal';
+import ProfileModal from '../../components/ProfileModal';
+import OrdersModal from '../../components/OrdersModal';
+import { MENU_ITEMS, CATEGORIES, IS_FIREBASE_ON } from '../../constants';
+import { AdminNotification, MenuItem, FilterType, CartItem, ExtraItem, CheckoutDetails, Category } from '../../types';
+import { askWaiter } from '../../services/geminiService';
+import { clearUserNotificationsFromFirebase, fetchCategoriesFromFirebase, fetchMenuFromFirebase, saveOrderToFirebase, subscribeToStoreSettingsFromFirebase, subscribeToUserNotifications, toFirebaseOrder } from '../../services/firebaseService';
 
 interface AiSuggestion {
   itemId: string;
@@ -27,7 +27,7 @@ interface CheckoutSession {
   savedToDatabase: boolean;
 }
 
-const App: React.FC = () => {
+const CustomerApp: React.FC = () => {
   // Dados dinâmicos (Menu e Categorias)
   const [menuItems, setMenuItems] = useState<MenuItem[]>(MENU_ITEMS);
   const [categories, setCategories] = useState<Category[]>(CATEGORIES);
@@ -552,4 +552,4 @@ const App: React.FC = () => {
   );
 };
 
-export default App;
+export default CustomerApp;
