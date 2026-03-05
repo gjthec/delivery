@@ -32,6 +32,7 @@ const ProfileModal: React.FC<Props> = ({ isOpen, onClose }) => {
       if (!name && latestOrder.customer?.name) {
         setName(latestOrder.customer.name);
         localStorage.setItem('foodai-customer-name', latestOrder.customer.name);
+        window.dispatchEvent(new Event('foodai:customer-updated'));
       }
 
       const savedAddressesStr = localStorage.getItem('foodai-addresses');
@@ -65,6 +66,7 @@ const ProfileModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const handleSaveProfile = () => {
     localStorage.setItem('foodai-customer-name', name);
     localStorage.setItem('foodai-customer-phone', phone);
+    window.dispatchEvent(new Event('foodai:customer-updated'));
     alert('Perfil salvo com sucesso!');
   };
 

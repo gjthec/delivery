@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MapPin, ChevronDown, Moon, Sun, Menu, Bell, Zap, Info, Settings, LogOut, X, CheckCircle2, Clock, Truck, UtensilsCrossed, User, ShoppingBag, MapPinned, Ticket } from 'lucide-react';
 import { AdminNotification } from '../types';
+import { getUserDisplayName } from '../modules/customer/utils/userDisplayName';
 
 interface Props {
   isDarkMode: boolean;
@@ -18,6 +19,12 @@ const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode, notifications, 
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
+  const [customerName, setCustomerName] = useState(() => localStorage.getItem('foodai-customer-name') || '');
+  const [customerPhone, setCustomerPhone] = useState(() => localStorage.getItem('foodai-customer-phone') || '');
+
+  const displayName = getUserDisplayName({ name: customerName });
+  const dropdownLabel = displayName || 'Cadastre-se';
+  const dropdownSubtitle = customerPhone || 'Faça seu login para continuar';
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -30,6 +37,21 @@ const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode, notifications, 
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    const syncCustomerFromStorage = () => {
+      setCustomerName(localStorage.getItem('foodai-customer-name') || '');
+      setCustomerPhone(localStorage.getItem('foodai-customer-phone') || '');
+    };
+
+    window.addEventListener('storage', syncCustomerFromStorage);
+    window.addEventListener('foodai:customer-updated', syncCustomerFromStorage as EventListener);
+
+    return () => {
+      window.removeEventListener('storage', syncCustomerFromStorage);
+      window.removeEventListener('foodai:customer-updated', syncCustomerFromStorage as EventListener);
+    };
+  }, []);
+
   const handleNotifToggle = () => {
     setIsNotifOpen(!isNotifOpen);
     if (!isNotifOpen) onReadNotifications();
@@ -39,6 +61,22 @@ const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode, notifications, 
   const handleMenuToggle = () => {
     setIsMenuOpen(!isMenuOpen);
     setIsNotifOpen(false);
+  };
+
+  const handleOpenProfile = () => {
+    onOpenProfile();
+    setIsMenuOpen(false);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('foodai-customer-name');
+    localStorage.removeItem('foodai-customer-phone');
+    localStorage.removeItem('foodai-selected-address');
+
+    setCustomerName('');
+    setCustomerPhone('');
+    setIsMenuOpen(false);
+    window.dispatchEvent(new Event('foodai:customer-updated'));
   };
 
   const getNotifIcon = (type: AdminNotification['type']) => {
@@ -135,10 +173,10 @@ const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode, notifications, 
             {isMenuOpen && (
               <div className="absolute top-16 right-0 w-64 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl rounded-[2.2rem] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200 origin-top-right z-[150]">
                 <div className="p-5 bg-zinc-50 dark:bg-zinc-800/30 border-b border-zinc-100 dark:border-zinc-800 flex items-center gap-3">
-                   <div className="w-10 h-10 orange-gradient rounded-full flex items-center justify-center text-white font-black">JD</div>
+                   <div className="w-10 h-10 orange-gradient rounded-full flex items-center justify-center text-white font-black">{(dropdownLabel[0] || 'C').toUpperCase()}</div>
                    <div className="flex flex-col">
-                      <span className="text-[13px] font-black text-zinc-900 dark:text-zinc-50">John Doe</span>
-                      <span className="text-[10px] font-bold text-zinc-400">Premium Member</span>
+                      <span className="text-[13px] font-black text-zinc-900 dark:text-zinc-50">{dropdownLabel}</span>
+                      <span className="text-[10px] font-bold text-zinc-400">{dropdownSubtitle}</span>
                    </div>
                 </div>
                 
@@ -154,9 +192,9 @@ const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode, notifications, 
                     </span>
                   </button>
 
-                  <button onClick={() => { onOpenProfile(); setIsMenuOpen(false); }} className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all text-zinc-500 hover:text-orange-500 group">
+                  <button onClick={handleOpenProfile} className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all text-zinc-500 hover:text-orange-500 group">
                     <User size={18} className="group-hover:scale-110 transition-transform" />
-                    <span className="text-xs font-black uppercase tracking-widest">Meu Perfil</span>
+                    <span className="text-xs font-black uppercase tracking-widest">{displayName ? 'Meu Perfil' : 'Cadastre-se'}</span>
                   </button>
                   <button onClick={() => { onOpenOrders(); setIsMenuOpen(false); }} className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all text-zinc-500 hover:text-orange-500 group">
                     <ShoppingBag size={18} className="group-hover:scale-110 transition-transform" />
@@ -169,7 +207,7 @@ const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode, notifications, 
                 </div>
 
                 <div className="p-3 border-t border-zinc-50 dark:border-zinc-800">
-                  <button className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-red-50 dark:hover:bg-red-950/20 transition-all text-zinc-400 hover:text-red-500 group">
+                  <button onClick={handleLogout} className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-red-50 dark:hover:bg-red-950/20 transition-all text-zinc-400 hover:text-red-500 group">
                     <LogOut size={18} />
                     <span className="text-xs font-black uppercase tracking-widest">Sair</span>
                   </button>

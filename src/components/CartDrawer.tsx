@@ -252,6 +252,7 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
 
       localStorage.setItem('foodai-customer-name', customerName);
       localStorage.setItem('foodai-customer-phone', customerPhone);
+      window.dispatchEvent(new Event('foodai:customer-updated'));
 
       setIsSubmittingCheckout(true);
 
