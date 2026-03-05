@@ -16,9 +16,7 @@ export default defineConfig(({ mode }) => {
       },
       resolve: {
         alias: {
-          '@': path.resolve(__dirname, './src'),
-          recharts: 'https://esm.sh/recharts@^3.7.0',
-          zod: 'https://esm.sh/zod@^3.24.1'
+          '@': path.resolve(__dirname, './src')
         }
       }
     };
