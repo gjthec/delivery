@@ -1,9 +1,10 @@
 import React from 'react';
+import { AppTab } from '../types';
 import { LayoutDashboard, Utensils, ClipboardList, TrendingUp, Sparkles, Package, LogOut, HeartHandshake, SmilePlus, Settings } from 'lucide-react';
 
 interface SidebarProps {
-  activeTab: string;
-  setActiveTab: (tab: string) => void;
+  activeTab: AppTab;
+  setActiveTab: (tab: AppTab) => void;
   onLogout: () => void;
 }
 

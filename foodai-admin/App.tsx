@@ -11,7 +11,7 @@ import ClientesFieis from './components/ClientesFieis';
 import Satisfacao from './components/Satisfacao';
 import Configuracoes from './components/Configuracoes';
 import AdminLogin from './components/AdminLogin';
-import { AppNotification } from './types';
+import { AppNotification, AppTab } from './types';
 import { dbGlobalSearch, dbNotifications, GlobalSearchResult } from './services/dbService';
 import { authService } from './services/authService';
 import {
@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState<AppTab>('dashboard');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isAIChatOpen, setIsAIChatOpen] = useState(false);

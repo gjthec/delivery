@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Sparkles, MessageSquare, History, Settings2, Save, Bot } from 'lucide-react';
 import { testAiWaiter } from '../services/geminiService';
+import { AiWaiterSuggestion } from '../types';
 import { INITIAL_MENU } from '../mockData';
 
 const DEFAULT_SYSTEM_PROMPT = `Você é um garçom virtual prestativo e profissional da "Sua Plataforma".
@@ -14,7 +15,7 @@ const AIFineTuning: React.FC = () => {
   const [systemPrompt, setSystemPrompt] = useState(DEFAULT_SYSTEM_PROMPT);
   const [isSaving, setIsSaving] = useState(false);
   const [testInput, setTestInput] = useState('');
-  const [messages, setMessages] = useState<{ role: 'user' | 'ai', content: string, suggestions?: any[] }[]>([]);
+  const [messages, setMessages] = useState<{ role: 'user' | 'ai', content: string, suggestions?: AiWaiterSuggestion[] }[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -133,7 +134,7 @@ const AIFineTuning: React.FC = () => {
                 {msg.suggestions && msg.suggestions.length > 0 && (
                   <div className="mt-4 pt-4 border-t border-slate-700/50 space-y-2">
                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Itens Sugeridos</p>
-                    {msg.suggestions.map((s: any, idx: number) => (
+                    {msg.suggestions.map((s, idx: number) => (
                       <div key={idx} className="flex items-center justify-between bg-slate-900/50 p-2 rounded-lg border border-slate-700">
                         <span className="text-xs font-medium text-orange-400">{s.itemId} x{s.quantity}</span>
                         <span className="text-[10px] text-slate-400 italic truncate max-w-[150px]">{s.reason}</span>

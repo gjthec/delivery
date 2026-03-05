@@ -339,11 +339,29 @@ const MenuManager: React.FC = () => {
     }
   };
 
+
+  const buildMenuItemDraft = (): MenuItem => ({
+    id: editingId || 'temp',
+    name: formData.name,
+    category: formData.category,
+    price: parseFloat(formData.price || '0'),
+    costPrice: formData.costPrice ? parseFloat(formData.costPrice) : undefined,
+    originalPrice: formData.originalPrice ? parseFloat(formData.originalPrice) : undefined,
+    description: formData.description,
+    imageUrl: formData.imageUrl || '',
+    rating: 5,
+    preparationTime: '20min',
+    size: formData.size,
+    tags: formData.tags,
+    ingredients: formData.ingredients,
+    extras: formData.extras
+  });
+
   const handleAIOptimize = async () => {
     if (!formData.name) return;
     setIsGeneratingDescription(true);
     try {
-      const result = await improveMenuItem({ ...formData, id: editingId || 'temp', price: parseFloat(formData.price || '0'), rating: 5, preparationTime: '20min' } as any);
+      const result = await improveMenuItem(buildMenuItemDraft());
       setFormData(prev => ({ 
         ...prev, 
         name: result.newName,

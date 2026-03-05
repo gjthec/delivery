@@ -31,7 +31,7 @@ const ComboAI: React.FC = () => {
     }
   };
 
-  const handleAddCombo = async (suggestion: any) => {
+  const handleAddCombo = async (suggestion: ComboSuggestions['combos'][number]) => {
     const newCombo: Combo = {
       id: '',
       name: suggestion.name,

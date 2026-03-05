@@ -3,7 +3,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { 
   MenuItem, 
   Order, 
-  SalesInsights, 
+  SalesInsightsData, 
   ComboSuggestions, 
   MenuCopy, 
   OwnerChatResponse,
@@ -15,7 +15,7 @@ const getAI = () => {
   return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
-export const getSalesInsights = async (orders: Order[]): Promise<SalesInsights> => {
+export const getSalesInsights = async (orders: Order[]): Promise<SalesInsightsData> => {
   const ai = getAI();
   const prompt = `Analise detalhadamente este histórico de pedidos: ${JSON.stringify(orders)}. Calcule KPIs reais (Faturamento, Ticket Médio), identifique tendências de horário e sugira melhorias práticas para aumentar o lucro.`;
 

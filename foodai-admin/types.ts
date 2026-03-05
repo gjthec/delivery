@@ -1,5 +1,8 @@
 
 export type OrderStatus = 'pending' | 'preparing' | 'shipping' | 'completed' | 'cancelled';
+export type PaymentMethod = 'credit' | 'debit' | 'pix' | 'cash';
+export type CardBrand = 'mastercard' | 'visa' | 'elo';
+export type AppTab = 'dashboard' | 'menu' | 'orders' | 'sales-insights' | 'combos-ai' | 'menu-ai' | 'clientes-fieis' | 'satisfacao' | 'configuracoes';
 
 export interface ExtraItem {
   name: string;
@@ -61,8 +64,8 @@ export interface Order {
   customerName: string;
   address: Address;
   payment: {
-    method: 'credit' | 'debit' | 'pix' | 'cash';
-    brand?: 'mastercard' | 'visa' | 'elo';
+    method: PaymentMethod;
+    brand?: CardBrand;
   };
 }
 
@@ -85,7 +88,7 @@ export type NotificationPayload = {
   orderId?: string;
   status?: OrderStatus;
   event?: OrderNotificationEvent;
-} & Record<string, any>;
+} & Record<string, unknown>;
 
 export interface AdminNotification {
   id: string;
@@ -109,7 +112,7 @@ export interface Combo {
 }
 
 // AI Specific Schemas
-export interface SalesInsights {
+export interface SalesInsightsData {
   summary: string;
   kpis: { orders: number, revenue: number, avgTicket: number };
   topItems: Array<{ name: string, qty: number, revenue: number, share: number }>;
@@ -130,7 +133,7 @@ export interface SalesInsights {
 export interface SavedInsight {
   id: string;
   date: string;
-  data: SalesInsights;
+  data: SalesInsightsData;
 }
 
 export interface ComboSuggestions {
@@ -155,13 +158,28 @@ export interface MenuCopy {
 export interface OwnerChatAction {
   type: "open_insights" | "create_combo" | "edit_menu" | "open_orders";
   label: string;
-  payload: Record<string, any>;
+  payload: Record<string, unknown>;
 }
+
+// Compatibilidade retroativa para imports existentes
+export type SalesInsights = SalesInsightsData;
 
 export interface OwnerChatResponse {
   answer: string;
   bullets: string[];
   actions: OwnerChatAction[];
+}
+
+
+export interface AiWaiterSuggestion {
+  itemId: string;
+  quantity: number;
+  reason: string;
+}
+
+export interface AiWaiterResponse {
+  reply?: string;
+  suggestions: AiWaiterSuggestion[];
 }
 
 export interface Coupon {

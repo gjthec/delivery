@@ -1,5 +1,5 @@
 import { IS_FIREBASE_ENABLED, firebaseConfig } from './config';
-import { MenuItem, Order, Combo, SalesInsights, SavedInsight, OrderStatus, AdminNotification, OrderNotificationEvent, Coupon, StoreSettings } from '../types';
+import { MenuItem, Order, Combo, SalesInsightsData, SavedInsight, OrderStatus, AdminNotification, OrderNotificationEvent, Coupon, StoreSettings, AppTab } from '../types';
 import { initializeApp } from 'firebase/app';
 import {
   getFirestore,
@@ -30,25 +30,29 @@ if (IS_FIREBASE_ENABLED && firebaseConfig.apiKey !== 'SUA_API_KEY' && firebaseCo
 }
 
 // Caminho raiz para organização dos dados
-const ROOT_PATH = ['platform', 'admin'];
+const ROOT_PATH = ['platform', 'admin'] as const;
 
 // Helper para remover campos 'undefined' que o Firestore não aceita
-const sanitizeData = (obj: any): any => {
-  if (Array.isArray(obj)) {
-    return obj.map(sanitizeData);
-  }
+const sanitizeData = <T>(obj: T): T => {
+  const sanitize = (value: unknown): unknown => {
+    if (Array.isArray(value)) {
+      return value.map((item) => sanitize(item));
+    }
 
-  if (obj !== null && typeof obj === 'object') {
-    return Object.keys(obj).reduce((acc: any, key) => {
-      const value = sanitizeData(obj[key]);
-      if (value !== undefined) {
-        acc[key] = value;
-      }
-      return acc;
-    }, {});
-  }
+    if (value !== null && typeof value === 'object') {
+      return Object.entries(value).reduce<Record<string, unknown>>((acc, [key, nestedValue]) => {
+        const sanitizedValue = sanitize(nestedValue);
+        if (sanitizedValue !== undefined) {
+          acc[key] = sanitizedValue;
+        }
+        return acc;
+      }, {});
+    }
 
-  return obj;
+    return value;
+  };
+
+  return sanitize(obj) as T;
 };
 
 // Chaves do LocalStorage (Fallback para persistência offline ou sem config)
@@ -86,7 +90,7 @@ const getLocal = <T>(key: string, defaultValue: T): T => {
   return data ? JSON.parse(data) : defaultValue;
 };
 
-const setLocal = (key: string, data: any) => {
+const setLocal = <T>(key: string, data: T) => {
   localStorage.setItem(key, JSON.stringify(data));
 };
 
@@ -711,7 +715,7 @@ export const dbInsights = {
     }
     return getLocal(KEYS.INSIGHTS, []);
   },
-  save: async (insight: SalesInsights): Promise<SavedInsight> => {
+  save: async (insight: SalesInsightsData): Promise<SavedInsight> => {
     const newEntry: SavedInsight = {
       id: `INS-${Date.now()}`,
       date: new Date().toISOString(),
@@ -757,7 +761,7 @@ export interface GlobalSearchResult {
   id: string;
   label: string;
   type: 'clientes' | 'pedidos' | 'produtos';
-  route: string;
+  route: AppTab;
 }
 
 export const dbLoyalCustomers = {
@@ -834,7 +838,7 @@ export const dbGlobalSearch = {
           id: order.customerName,
           label: order.customerName,
           type: 'clientes',
-          route: 'clientes-fieis'
+          route: 'clientes-fieis' as const
         });
       }
     });
@@ -842,12 +846,12 @@ export const dbGlobalSearch = {
     const orderResults = orders
       .filter((order) => order.id.toLowerCase().includes(normalized))
       .slice(0, 5)
-      .map((order) => ({ id: order.id, label: `Pedido ${order.id}`, type: 'pedidos' as const, route: 'orders' }));
+      .map((order) => ({ id: order.id, label: `Pedido ${order.id}`, type: 'pedidos' as const, route: 'orders' as const }));
 
     const productResults = menu
       .filter((item) => item.name.toLowerCase().includes(normalized))
       .slice(0, 5)
-      .map((item) => ({ id: item.id, label: item.name, type: 'produtos' as const, route: 'menu' }));
+      .map((item) => ({ id: item.id, label: item.name, type: 'produtos' as const, route: 'menu' as const }));
 
     return [...Array.from(customersMap.values()).slice(0, 5), ...orderResults, ...productResults];
   }
