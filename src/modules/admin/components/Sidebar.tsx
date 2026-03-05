@@ -10,6 +10,7 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout }) => {
   const { companyName } = useCompanyName();
+  const adminCompanyName = companyName?.trim() ? companyName : 'Cadastre sua empresa';
   const mainItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'menu', label: 'Cardápio', icon: Utensils },
@@ -33,7 +34,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout }) 
             P
           </div>
           <span className="text-xl font-black text-slate-800 dark:text-white tracking-tighter uppercase">
-            <span className="text-orange-500">{companyName}</span>
+            <span className="text-orange-500">{adminCompanyName}</span>
           </span>
         </div>
       </div>
