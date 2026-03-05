@@ -6,9 +6,10 @@ import {
   Plus, Edit2, Trash2, X, Sparkles, RefreshCw, 
   Image as ImageIcon, Tag, List, PlusCircle, MinusCircle, DollarSign,
   Check, ChevronDown, Settings, Save, Search, LayoutGrid, Filter, ArrowUpDown,
-  TicketPercent, AlertTriangle, Bike
+  TicketPercent, AlertTriangle, Bike, Pizza
 } from 'lucide-react';
 import { INITIAL_CATEGORIES } from '../mockData';
+import PizzaConfiguratorModal from '../pizza/PizzaConfiguratorModal';
 
 type SortOption = 'category' | 'price-asc' | 'price-desc' | 'name';
 
@@ -43,6 +44,8 @@ const MenuManager: React.FC = () => {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isPizzaConfiguratorOpen, setIsPizzaConfiguratorOpen] = useState(false);
+  const [editingPizzaBase, setEditingPizzaBase] = useState<MenuItem | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
   
@@ -267,6 +270,12 @@ const MenuManager: React.FC = () => {
   const processedItems = getProcessedItems();
 
   const handleEdit = (item: MenuItem) => {
+    if (item.type === 'pizza') {
+      setEditingPizzaBase(item);
+      setIsPizzaConfiguratorOpen(true);
+      return;
+    }
+
     setFormData({
       name: item.name,
       category: item.category,
@@ -873,6 +882,12 @@ const MenuManager: React.FC = () => {
              >
                <Plus size={18} /> <span className="inline">Novo</span>
              </button>
+             <button 
+               onClick={() => { setEditingPizzaBase(null); setIsPizzaConfiguratorOpen(true); }} 
+               className="flex-1 xl:flex-initial flex items-center justify-center gap-2 bg-stone-900 text-white px-6 py-3 rounded-2xl font-black uppercase text-[10px] shadow-lg hover:scale-105 active:scale-95 transition-all whitespace-nowrap"
+             >
+               <Pizza size={18} /> <span className="inline">Configurar Pizza</span>
+             </button>
           </div>
         </div>
       </div>
@@ -936,6 +951,18 @@ const MenuManager: React.FC = () => {
             {renderItemsContainer(processedItems)}
         </div>
       )}
+
+
+      <PizzaConfiguratorModal
+        open={isPizzaConfiguratorOpen}
+        onClose={() => setIsPizzaConfiguratorOpen(false)}
+        pizzaBase={editingPizzaBase}
+        categories={categories}
+        onSaved={async () => {
+          const menuData = await loadMenu();
+          await loadCatalogs(menuData);
+        }}
+      />
 
       {/* MODAL PRINCIPAL (NOVO/EDITAR) */}
       {isModalOpen && (
