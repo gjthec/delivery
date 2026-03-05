@@ -2,6 +2,7 @@
 import { IS_FIREBASE_ON } from '../constants';
 import { db } from '../firebaseConfig';
 import { collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
+import { categoriesCollectionRef, couponsCollectionRef, menuCollectionRef, storeSettingsDocRef } from '../firebase/firestore-paths';
 import {
   AdminNotification,
   AppNotification,
@@ -423,28 +424,16 @@ export async function clearUserNotificationsFromFirebase(notificationIds: string
 export async function fetchMenuFromFirebase(): Promise<MenuItem[] | null> {
   if (!IS_FIREBASE_ON) return null;
 
-  const menuPaths: string[][] = [
-    ['menu'],
-    ['foodai', 'admin', 'menu']
-  ];
-
-  for (const pathParts of menuPaths) {
-    try {
-      const querySnapshot = await getDocs(collection(db, ...pathParts));
-      if (!querySnapshot.empty) {
-        console.log(`[Firebase] Cardápio carregado de ${pathParts.join('/')}`);
-        return querySnapshot.docs.map((docSnap) => ({
-          ...docSnap.data(),
-          id: docSnap.id
-        } as MenuItem));
-      }
-    } catch (error) {
-      console.error(`[Firebase] Erro ao buscar menu em ${pathParts.join('/')}:`, error);
-    }
+  try {
+    const querySnapshot = await getDocs(menuCollectionRef(db));
+    return querySnapshot.docs.map((docSnap) => ({
+      ...docSnap.data(),
+      id: docSnap.id
+    } as MenuItem));
+  } catch (error) {
+    console.error('[Firebase] Erro ao buscar menu:', error);
+    return [];
   }
-
-  console.warn('[Firebase] Nenhum item encontrado no cardápio (paths testados: menu, foodai/admin/menu).');
-  return [];
 }
 
 /**
@@ -453,32 +442,20 @@ export async function fetchMenuFromFirebase(): Promise<MenuItem[] | null> {
 export async function fetchCategoriesFromFirebase(): Promise<Category[] | null> {
   if (!IS_FIREBASE_ON) return null;
 
-  const categoryPaths: string[][] = [
-    ['categories'],
-    ['foodai', 'admin', 'categories']
-  ];
-
-  for (const pathParts of categoryPaths) {
-    try {
-      const querySnapshot = await getDocs(collection(db, ...pathParts));
-      if (!querySnapshot.empty) {
-        console.log(`[Firebase] Categorias carregadas de ${pathParts.join('/')}`);
-        return querySnapshot.docs.map((docSnap) => ({
-          ...docSnap.data(),
-          id: docSnap.id
-        } as Category));
-      }
-    } catch (error) {
-      console.error(`[Firebase] Erro ao buscar categorias em ${pathParts.join('/')}:`, error);
-    }
+  try {
+    const querySnapshot = await getDocs(categoriesCollectionRef(db));
+    return querySnapshot.docs.map((docSnap) => ({
+      ...docSnap.data(),
+      id: docSnap.id
+    } as Category));
+  } catch (error) {
+    console.error('[Firebase] Erro ao buscar categorias:', error);
+    return [];
   }
-
-  console.warn('[Firebase] Nenhuma categoria encontrada (paths testados: categories, foodai/admin/categories).');
-  return [];
 }
 
 /**
- * Busca um cupom no Firestore em foodai/admin/coupons/{CODE}.
+ * Busca um cupom no Firestore no tenant atual (deliveryuai/{tenantId}/coupons/{CODE}).
  */
 
 export async function fetchCouponFromFirebase(code: string): Promise<FirebaseCoupon | null> {
@@ -488,7 +465,7 @@ export async function fetchCouponFromFirebase(code: string): Promise<FirebaseCou
   if (!normalizedCode) return null;
 
   try {
-    const couponRef = doc(db, 'foodai', 'admin', 'coupons', normalizedCode);
+    const couponRef = doc(couponsCollectionRef(db), normalizedCode);
     const couponSnapshot = await getDoc(couponRef);
 
     if (!couponSnapshot.exists()) {
@@ -511,7 +488,7 @@ export async function fetchCouponFromFirebase(code: string): Promise<FirebaseCou
 }
 
 /**
- * Escuta em tempo real as configurações da loja em foodai/admin/settings/store.
+ * Escuta em tempo real as configurações da loja no tenant atual (deliveryuai/{tenantId}/settings/store).
  */
 export function subscribeToStoreSettingsFromFirebase(onChange: (settings: FirebaseStoreSettings | null) => void): () => void {
   if (!IS_FIREBASE_ON) {
@@ -519,7 +496,7 @@ export function subscribeToStoreSettingsFromFirebase(onChange: (settings: Fireba
     return () => {};
   }
 
-  const settingsRef = doc(db, 'foodai', 'admin', 'settings', 'store');
+  const settingsRef = storeSettingsDocRef(db);
 
   return onSnapshot(
     settingsRef,
@@ -547,13 +524,13 @@ export function subscribeToStoreSettingsFromFirebase(onChange: (settings: Fireba
 }
 
 /**
- * Busca as configurações da loja no Firestore em foodai/admin/settings/store.
+ * Busca as configurações da loja no Firestore do tenant atual (deliveryuai/{tenantId}/settings/store).
  */
 export async function fetchStoreSettingsFromFirebase(): Promise<FirebaseStoreSettings | null> {
   if (!IS_FIREBASE_ON) return null;
 
   try {
-    const settingsRef = doc(db, 'foodai', 'admin', 'settings', 'store');
+    const settingsRef = storeSettingsDocRef(db);
     const settingsSnapshot = await getDoc(settingsRef);
 
     if (!settingsSnapshot.exists()) {
