@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { improveMenuItem } from '../services/aiService';
 import { INITIAL_MENU } from '../mockData';
 import { MenuItem, MenuCopy } from '../types';
+import StandardDialog from '../../../components/modals/StandardDialog';
 import { 
   Sparkles, RefreshCw, Check, Star, Tag, 
   ArrowRight, AlertCircle, ShoppingCart, 
@@ -14,6 +15,7 @@ const MenuAI: React.FC = () => {
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ id: string, copy: MenuCopy } | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [errorDialogOpen, setErrorDialogOpen] = useState(false);
 
   // Carregar menu sincronizado
   useEffect(() => {
@@ -34,7 +36,7 @@ const MenuAI: React.FC = () => {
       setPreview({ id: item.id, copy: result });
     } catch (e) {
       console.error(e);
-      alert("Erro ao conectar com a IA de Redação. Verifique sua conexão.");
+      setErrorDialogOpen(true);
     } finally {
       setLoadingId(null);
     }
@@ -60,6 +62,15 @@ const MenuAI: React.FC = () => {
   };
 
   return (
+    <>
+      <StandardDialog
+        isOpen={errorDialogOpen}
+        title="Erro de conexão"
+        message="Erro ao conectar com a IA de Redação. Verifique sua conexão."
+        onClose={() => setErrorDialogOpen(false)}
+        variant="error"
+      />
+
     <div className="space-y-8 pb-20">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
@@ -210,6 +221,7 @@ const MenuAI: React.FC = () => {
         </div>
       </div>
     </div>
+    </>
   );
 };
 

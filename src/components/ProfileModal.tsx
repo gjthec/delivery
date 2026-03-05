@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Loader2, User, X } from 'lucide-react';
 import { fetchOrdersByPhone } from '../services/firebaseService';
 import { Address } from '../types';
+import StandardDialog from './modals/StandardDialog';
 
 interface Props {
   isOpen: boolean;
@@ -12,6 +13,7 @@ const ProfileModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [phone, setPhone] = useState(() => localStorage.getItem('foodai-customer-phone') || '');
   const [name, setName] = useState(() => localStorage.getItem('foodai-customer-name') || '');
   const [isLoading, setIsLoading] = useState(false);
+  const [successDialogOpen, setSuccessDialogOpen] = useState(false);
 
   useEffect(() => {
     if (isOpen && phone) {
@@ -32,6 +34,7 @@ const ProfileModal: React.FC<Props> = ({ isOpen, onClose }) => {
       if (!name && latestOrder.customer?.name) {
         setName(latestOrder.customer.name);
         localStorage.setItem('foodai-customer-name', latestOrder.customer.name);
+        window.dispatchEvent(new Event('foodai:customer-updated'));
       }
 
       const savedAddressesStr = localStorage.getItem('foodai-addresses');
@@ -65,13 +68,22 @@ const ProfileModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const handleSaveProfile = () => {
     localStorage.setItem('foodai-customer-name', name);
     localStorage.setItem('foodai-customer-phone', phone);
-    alert('Perfil salvo com sucesso!');
+    window.dispatchEvent(new Event('foodai:customer-updated'));
+    setSuccessDialogOpen(true);
   };
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-[170] flex items-end sm:items-center justify-center sm:px-6">
+      <StandardDialog
+        isOpen={successDialogOpen}
+        title="Perfil atualizado"
+        message="Perfil salvo com sucesso!"
+        onClose={() => setSuccessDialogOpen(false)}
+        variant="success"
+      />
+
       <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-xl" onClick={onClose} />
 
       <div className="relative w-full max-w-lg bg-white dark:bg-zinc-950 sm:rounded-[3rem] rounded-t-[2.5rem] h-[85vh] sm:h-auto sm:max-h-[90vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500">

@@ -2,9 +2,12 @@ import { IS_FIREBASE_ON } from '../../../constants';
 import { CartItem, CheckoutDetails } from '../../../types';
 import { saveOrderToFirebase, toFirebaseOrder } from '../../../services/firebaseService';
 import { WHATSAPP_NUMBER } from '../constants/customer.constants';
+import { getCompanyNameFromLocalSources } from '../../../hooks/useCompanyName';
 
 export function sendWhatsAppMessage(details: CheckoutDetails, items: CartItem[], total: number) {
-  let message = `*🍔 NOVO PEDIDO - FoodAI*%0A%0A`;
+  const companyName = getCompanyNameFromLocalSources();
+
+  let message = `*🍔 NOVO PEDIDO - ${companyName}*%0A%0A`;
   message += `*Itens do Pedido:*%0A`;
   items.forEach(ci => {
     const extras = ci.selectedExtras.length > 0 ? ` (+ ${ci.selectedExtras.map(e => e.name).join(', ')})` : '';
@@ -28,7 +31,7 @@ export function sendWhatsAppMessage(details: CheckoutDetails, items: CartItem[],
   }
 
   message += `%0A%0A*VALOR TOTAL: R$ ${total.toFixed(2)}*`;
-  message += `%0A%0A_Enviado via FoodAI App_`;
+  message += `%0A%0A_Enviado via ${companyName} App_`;
 
   window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${message}`, '_blank');
 }
@@ -49,7 +52,7 @@ export function calculateCartTotal(cart: CartItem[], deliveryFee: number) {
 export async function processOrderToDatabase(orderId: string, details: CheckoutDetails, items: CartItem[], total: number) {
   const orderForDb = toFirebaseOrder({
     id: orderId,
-    customerName: details.customer.name || 'Cliente FoodAI',
+    customerName: details.customer.name || 'Cliente',
     details,
     items,
     total

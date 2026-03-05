@@ -11,7 +11,7 @@ interface Props {
   onRemove: (index: number) => void;
   onEdit: (index: number) => void;
   onClear: () => void;
-  onCheckout: (details: CheckoutDetails) => void;
+  onCheckout: (details: CheckoutDetails) => Promise<{ success: boolean; message?: string }>;
   deliveryFee: number;
 }
 
@@ -30,6 +30,7 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
   const [isCouponModalOpen, setIsCouponModalOpen] = useState(false);
   const [appliedCoupon, setAppliedCoupon] = useState<FirebaseCoupon | null>(null);
   const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
+  const [isSubmittingCheckout, setIsSubmittingCheckout] = useState(false);
   const [feedback, setFeedback] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
   
   // Gestão de Endereços
@@ -234,7 +235,9 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
     setIsFetchingUser(false);
   };
 
-  const handleNextStep = () => {
+  const handleNextStep = async () => {
+    if (isSubmittingCheckout) return;
+
     if (step === 'cart') setStep('checkout');
     else {
       if (!customerName.trim() || !customerPhone.trim()) {
@@ -249,24 +252,41 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
 
       localStorage.setItem('foodai-customer-name', customerName);
       localStorage.setItem('foodai-customer-phone', customerPhone);
+      window.dispatchEvent(new Event('foodai:customer-updated'));
 
-      onCheckout({
-        customer: {
-          name: customerName,
-          phone: customerPhone
-        },
-        payment: {
-          type: paymentType,
-          brand: (paymentType === 'credit' || paymentType === 'debit') ? cardBrand : undefined,
-          changeFor: paymentType === 'cash' ? changeFor : undefined
-        },
-        address: selectedAddress
-      });
-      setTimeout(() => {
-        setStep('cart');
-        setAppliedCoupon(null);
-        setCouponCode('');
-      }, 500);
+      setIsSubmittingCheckout(true);
+
+      try {
+        const checkoutResult = await onCheckout({
+          customer: {
+            name: customerName,
+            phone: customerPhone
+          },
+          payment: {
+            type: paymentType,
+            brand: (paymentType === 'credit' || paymentType === 'debit') ? cardBrand : undefined,
+            changeFor: paymentType === 'cash' ? changeFor : undefined
+          },
+          address: selectedAddress
+        });
+
+        if (checkoutResult.success) {
+          setFeedback({ message: checkoutResult.message || 'Pedido enviado com sucesso!', type: 'success' });
+          setTimeout(() => {
+            setStep('cart');
+            setAppliedCoupon(null);
+            setCouponCode('');
+          }, 500);
+          return;
+        }
+
+        setFeedback({
+          message: checkoutResult.message || 'Não foi possível finalizar seu pedido. Tente novamente.',
+          type: 'error'
+        });
+      } finally {
+        setIsSubmittingCheckout(false);
+      }
     }
   };
 
@@ -704,11 +724,14 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
                   )}
                   <button 
                     onClick={handleNextStep}
-                    className="flex-1 py-5 md:py-6 orange-gradient orange-glow text-white rounded-[2.2rem] font-black flex items-center justify-between px-8 active:scale-[0.98] transition-all shadow-xl shadow-orange-500/30"
+                    disabled={isSubmittingCheckout}
+                    className="flex-1 py-5 md:py-6 orange-gradient orange-glow text-white rounded-[2.2rem] font-black flex items-center justify-between px-8 active:scale-[0.98] transition-all shadow-xl shadow-orange-500/30 disabled:opacity-70 disabled:cursor-not-allowed"
                   >
                     <div className="flex items-center gap-3">
-                      {step === 'cart' ? <ShoppingBag size={22} strokeWidth={3} /> : <CheckCircle2 size={22} strokeWidth={3} />}
-                      <span className="uppercase tracking-[0.2em] text-[11px] md:text-[12px]">{step === 'cart' ? 'Continuar' : 'Finalizar Pedido'}</span>
+                      {isSubmittingCheckout ? <Loader2 size={22} strokeWidth={3} className="animate-spin" /> : (step === 'cart' ? <ShoppingBag size={22} strokeWidth={3} /> : <CheckCircle2 size={22} strokeWidth={3} />)}
+                      <span className="uppercase tracking-[0.2em] text-[11px] md:text-[12px]">
+                        {isSubmittingCheckout ? 'Enviando...' : (step === 'cart' ? 'Continuar' : 'Finalizar Pedido')}
+                      </span>
                     </div>
                     <div className="flex items-center gap-3">
                        <div className="h-6 w-[1px] bg-white/20" />

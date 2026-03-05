@@ -3,20 +3,33 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Sparkles, MessageSquare, History, Settings2, Save, Bot } from 'lucide-react';
 import { testAiWaiter } from '../services/geminiService';
 import { INITIAL_MENU } from '../mockData';
+import StandardDialog from '../../../components/modals/StandardDialog';
+import { useCompanyName } from '../../../hooks/useCompanyName';
 
-const DEFAULT_SYSTEM_PROMPT = `Você é um garçom virtual prestativo e profissional da "Sua Plataforma".
+function buildDefaultSystemPrompt(companyName: string) {
+  return `Você é um garçom virtual prestativo e profissional da "${companyName}".
 Seu objetivo é sugerir itens do cardápio, lidar com pedidos educadamente e fornecer descrições úteis.
 Sempre retorne as respostas no formato JSON exigido.
 Mantenha um tom amigável e eficiente.
 Se um cliente pedir uma recomendação, considere os itens populares e as tags.`;
+}
 
 const AIFineTuning: React.FC = () => {
-  const [systemPrompt, setSystemPrompt] = useState(DEFAULT_SYSTEM_PROMPT);
+  const { companyName } = useCompanyName();
+  const [systemPrompt, setSystemPrompt] = useState(() => buildDefaultSystemPrompt(companyName));
   const [isSaving, setIsSaving] = useState(false);
   const [testInput, setTestInput] = useState('');
   const [messages, setMessages] = useState<{ role: 'user' | 'ai', content: string, suggestions?: any[] }[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const hasManualPromptChanges = useRef(false);
+
+  useEffect(() => {
+    if (!hasManualPromptChanges.current) {
+      setSystemPrompt(buildDefaultSystemPrompt(companyName));
+    }
+  }, [companyName]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -50,11 +63,20 @@ const AIFineTuning: React.FC = () => {
     setIsSaving(true);
     setTimeout(() => {
       setIsSaving(false);
-      alert('Instrução da IA atualizada com sucesso!');
+      setSaveDialogOpen(true);
     }, 800);
   };
 
   return (
+    <>
+      <StandardDialog
+        isOpen={saveDialogOpen}
+        title="Instrução atualizada"
+        message="Instrução da IA atualizada com sucesso!"
+        onClose={() => setSaveDialogOpen(false)}
+        variant="success"
+      />
+
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-140px)]">
       <div className="bg-white rounded-3xl border border-slate-100 shadow-sm flex flex-col overflow-hidden">
         <div className="p-6 border-b border-slate-50 flex items-center justify-between">
@@ -88,7 +110,10 @@ const AIFineTuning: React.FC = () => {
           <div className="flex-1">
             <textarea
               value={systemPrompt}
-              onChange={(e) => setSystemPrompt(e.target.value)}
+              onChange={(e) => {
+                hasManualPromptChanges.current = true;
+                setSystemPrompt(e.target.value);
+              }}
               className="w-full h-full min-h-[300px] p-5 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-orange-500/5 focus:border-orange-500 text-slate-700 text-sm font-mono leading-relaxed"
               placeholder="Digite as instruções do sistema para a IA..."
             />
@@ -176,6 +201,7 @@ const AIFineTuning: React.FC = () => {
         </div>
       </div>
     </div>
+    </>
   );
 };
 

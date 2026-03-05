@@ -12,6 +12,43 @@ import type { FirebaseOrder } from './firebaseService';
 
 const isDev = import.meta.env.DEV;
 
+function findUndefinedPaths(value: unknown, currentPath = ''): string[] {
+  if (value === undefined) {
+    return [currentPath || '<root>'];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) => findUndefinedPaths(item, `${currentPath}[${index}]`));
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>).flatMap(([key, nested]) => {
+      const nextPath = currentPath ? `${currentPath}.${key}` : key;
+      return findUndefinedPaths(nested, nextPath);
+    });
+  }
+
+  return [];
+}
+
+function removeUndefinedDeep<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => item !== undefined)
+      .map((item) => removeUndefinedDeep(item)) as T;
+  }
+
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, currentValue]) => currentValue !== undefined)
+      .map(([key, currentValue]) => [key, removeUndefinedDeep(currentValue)]);
+
+    return Object.fromEntries(entries) as T;
+  }
+
+  return value;
+}
+
 function normalizePhone(phone: string): string {
   return phone.replace(/\D/g, '');
 }
@@ -40,7 +77,7 @@ export async function createTenantOrder(orderData: FirebaseOrder): Promise<boole
   const tenantId = getTenantId();
 
   try {
-    const orderPayload = {
+    const rawOrderPayload = {
       ...orderData,
       tenantId,
       phone: orderData.customer?.phone || orderData.customerPhone || '',
@@ -49,6 +86,13 @@ export async function createTenantOrder(orderData: FirebaseOrder): Promise<boole
       serverTimestamp: serverTimestamp()
     };
 
+    const undefinedPaths = findUndefinedPaths(rawOrderPayload);
+    if (isDev && undefinedPaths.length > 0) {
+      console.warn('[orders] Campos undefined no payload do pedido:', undefinedPaths);
+    }
+
+    const orderPayload = removeUndefinedDeep(rawOrderPayload);
+
     devLog(`Gravando pedido em ${tenantCollectionPath('orders').join('/')}/${orderData.id}`, {
       orderId: orderData.id,
       customerPhone: maskPhone(orderPayload.customerPhone)
@@ -56,7 +100,7 @@ export async function createTenantOrder(orderData: FirebaseOrder): Promise<boole
 
     await setDoc(orderDocRef(db, orderData.id), orderPayload);
 
-    const notification = {
+    const notification = removeUndefinedDeep({
       id: orderData.id,
       title: 'Pedido pendente',
       message: `Novo pedido pendente: ${orderData.id}`,
@@ -69,7 +113,7 @@ export async function createTenantOrder(orderData: FirebaseOrder): Promise<boole
         event: 'created'
       },
       serverTimestamp: serverTimestamp()
-    };
+    });
 
     await setDoc(notificationDocRef(db, notification.id), notification);
     return true;

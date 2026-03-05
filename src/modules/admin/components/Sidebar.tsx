@@ -1,5 +1,6 @@
 import React from 'react';
 import { LayoutDashboard, Utensils, ClipboardList, TrendingUp, Sparkles, Package, LogOut, HeartHandshake, SmilePlus, Settings } from 'lucide-react';
+import { useCompanyName } from '../../../hooks/useCompanyName';
 
 interface SidebarProps {
   activeTab: string;
@@ -8,6 +9,8 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout }) => {
+  const { companyName } = useCompanyName();
+  const adminCompanyName = companyName?.trim() ? companyName : 'Cadastre sua empresa';
   const mainItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'menu', label: 'Cardápio', icon: Utensils },
@@ -31,7 +34,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout }) 
             P
           </div>
           <span className="text-xl font-black text-slate-800 dark:text-white tracking-tighter uppercase">
-            Sua <span className="text-orange-500">Plataforma</span>
+            <span className="text-orange-500">{adminCompanyName}</span>
           </span>
         </div>
       </div>
