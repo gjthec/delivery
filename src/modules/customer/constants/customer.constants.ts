@@ -1,6 +1,6 @@
 import { QuickPrompt } from '../types/customer-app.types';
 
-export const PIX_CODE = '00020126330014br.gov.bcb.pix0111123456789015204000053039865802BR5925FoodAI Restaurantes6009Sao Paulo62070503***6304E2D1';
+export const PIX_CODE = '00020126330014br.gov.bcb.pix0111123456789015204000053039865802BR5925Empresa Demo6009Sao Paulo62070503***6304E2D1';
 export const WHATSAPP_NUMBER = '5535998842525';
 
 export const QUICK_PROMPTS: QuickPrompt[] = [

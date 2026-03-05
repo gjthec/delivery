@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { MapPin, ChevronDown, Moon, Sun, Menu, Bell, Zap, Info, Settings, LogOut, X, CheckCircle2, Clock, Truck, UtensilsCrossed, User, ShoppingBag, MapPinned, Ticket } from 'lucide-react';
 import { AdminNotification } from '../types';
 import { getUserDisplayName } from '../modules/customer/utils/userDisplayName';
+import { useCompanyName } from '../hooks/useCompanyName';
 
 interface Props {
   isDarkMode: boolean;
@@ -21,6 +22,7 @@ const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode, notifications, 
   const notifRef = useRef<HTMLDivElement>(null);
   const [customerName, setCustomerName] = useState(() => localStorage.getItem('foodai-customer-name') || '');
   const [customerPhone, setCustomerPhone] = useState(() => localStorage.getItem('foodai-customer-phone') || '');
+  const { companyName } = useCompanyName();
 
   const displayName = getUserDisplayName({ name: customerName });
   const dropdownLabel = displayName || 'Cadastre-se';
@@ -109,8 +111,8 @@ const Header: React.FC<Props> = ({ isDarkMode, onToggleDarkMode, notifications, 
             <Zap size={20} className="text-white fill-white" />
           </div>
           <div className="flex flex-col -space-y-1">
-            <h1 className="text-xl md:text-2xl font-[900] tracking-tighter text-zinc-900 dark:text-zinc-50">Food<span className="text-orange-500">AI</span></h1>
-            <span className="text-[8px] font-black uppercase tracking-[0.2em] text-orange-600/60 leading-none">Smart Delivery</span>
+            <h1 className="text-xl md:text-2xl font-[900] tracking-tighter text-zinc-900 dark:text-zinc-50">{companyName}</h1>
+            <span className="text-[8px] font-black uppercase tracking-[0.2em] text-orange-600/60 leading-none">{companyName}</span>
           </div>
         </div>
 

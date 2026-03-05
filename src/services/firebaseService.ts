@@ -146,10 +146,10 @@ export function toFirebaseOrder(params: {
 
   return {
     id,
-    customerName: customerName || 'Cliente FoodAI',
+    customerName: customerName || 'Cliente',
     customerPhone: details.customer?.phone || '',
     customer: details.customer ? {
-      name: details.customer.name || 'Cliente FoodAI',
+      name: details.customer.name || 'Cliente',
       phone: details.customer.phone || '',
       address: {
         ...details.address,

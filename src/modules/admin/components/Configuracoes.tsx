@@ -22,6 +22,7 @@ const Configuracoes: React.FC = () => {
         deliveryFee: Number(form.deliveryFee || 0),
         averageTimeMinutes: Number(form.averageTimeMinutes || 0)
       });
+      window.dispatchEvent(new Event('foodai:company-updated'));
       setStatus('success');
     } catch {
       setStatus('error');
