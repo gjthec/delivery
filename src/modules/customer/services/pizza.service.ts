@@ -1,16 +1,32 @@
-import { getDocs } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../../../firebaseConfig';
-import { pizzaFlavorsCollectionRef } from '../../../firebase/firestore-paths';
+import { pizzaFlavorsCollectionRef, tenantPathSegments } from '../../../firebase/firestore-paths';
 import { PizzaFlavor } from '../../../types';
+import { normalizePizzaFlavor } from '../utils/menu-normalizer.util';
+
+export async function listPizzaFlavors(): Promise<PizzaFlavor[]> {
+  const sources = [
+    pizzaFlavorsCollectionRef(db),
+    collection(db, ...tenantPathSegments(), 'catalog', 'pizzaFlavors')
+  ];
+
+  for (const ref of sources) {
+    try {
+      const snapshot = await getDocs(ref);
+      const flavors = snapshot.docs
+        .map((docSnap) => normalizePizzaFlavor(docSnap.data(), docSnap.id))
+        .filter((item): item is PizzaFlavor => Boolean(item));
+
+      if (flavors.length > 0) return flavors;
+    } catch {
+      // tenta próximo path
+    }
+  }
+
+  return [];
+}
 
 export async function getActivePizzaFlavors(): Promise<PizzaFlavor[]> {
-  const snapshot = await getDocs(pizzaFlavorsCollectionRef(db));
-  return snapshot.docs
-    .map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as Omit<PizzaFlavor, 'id'>) }))
-    .filter((flavor) => flavor.active)
-    .map((flavor) => ({
-      ...flavor,
-      tags: Array.isArray(flavor.tags) ? flavor.tags : [],
-      priceDeltaBySize: flavor.priceDeltaBySize || null
-    }));
+  const flavors = await listPizzaFlavors();
+  return flavors.filter((flavor) => flavor.active);
 }

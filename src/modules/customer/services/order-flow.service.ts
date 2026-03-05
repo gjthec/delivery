@@ -12,7 +12,9 @@ export function sendWhatsAppMessage(details: CheckoutDetails, items: CartItem[],
   items.forEach(ci => {
     if (ci.pizzaConfig) {
       const flavors = ci.pizzaConfig.flavors.map((flavor) => flavor.name).join(', ');
+      const ingredients = Array.from(new Set(ci.pizzaConfig.flavors.flatMap((flavor) => flavor.ingredients || []))).join(', ');
       message += `• ${ci.quantity}x ${ci.item.name} (${ci.pizzaConfig.sizeLabel}) - ${flavors}%0A`;
+      if (ingredients) message += `   _Ingredientes: ${ingredients}_%0A`;
       if (ci.observations) message += `   _Obs: ${ci.observations}_%0A`;
       return;
     }

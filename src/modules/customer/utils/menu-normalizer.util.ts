@@ -70,13 +70,46 @@ function normalizePricingStrategy(value: unknown): PizzaPricingStrategy {
   if (
     value === 'highestFlavor'
     || value === 'averageFlavor'
-    || value === 'sumDeltas'
     || value === 'fixedBySize'
   ) {
     return value;
   }
 
   return 'highestFlavor';
+}
+
+
+function normalizePriceDeltaBySize(value: unknown): Record<string, number> | null {
+  if (!value || typeof value !== 'object') return null;
+
+  const entries = Object.entries(value as Record<string, unknown>)
+    .map(([sizeId, delta]) => {
+      const parsed = toNumber(delta);
+      return parsed === null ? null : [String(sizeId), parsed] as const;
+    })
+    .filter((entry): entry is readonly [string, number] => Boolean(entry));
+
+  if (entries.length === 0) return null;
+  return Object.fromEntries(entries);
+}
+
+export function normalizePizzaFlavor(raw: unknown, fallbackId?: string) {
+  if (!raw || typeof raw !== 'object') return null;
+  const payload = raw as Record<string, unknown>;
+  const id = String(payload.id ?? fallbackId ?? '').trim();
+  const name = String(payload.name ?? '').trim();
+  if (!id || !name) return null;
+
+  return {
+    id,
+    name,
+    description: payload.description ? String(payload.description) : null,
+    imageUrl: payload.imageUrl ? String(payload.imageUrl) : null,
+    active: typeof payload.active === 'boolean' ? payload.active : true,
+    tags: toStringArray(payload.tags),
+    ingredients: toStringArray(payload.ingredients),
+    priceDeltaBySize: normalizePriceDeltaBySize(payload.priceDeltaBySize)
+  };
 }
 
 function normalizeSingleItem(raw: unknown, fallbackId?: string): MenuItemSource | null {

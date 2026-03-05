@@ -11,7 +11,7 @@ export interface PizzaSizeSource {
   slices?: number | null;
 }
 
-export type PizzaPricingStrategy = 'highestFlavor' | 'averageFlavor' | 'sumDeltas' | 'fixedBySize';
+export type PizzaPricingStrategy = 'highestFlavor' | 'averageFlavor' | 'fixedBySize';
 
 export interface MenuItemSource {
   id: string;

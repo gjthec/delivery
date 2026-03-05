@@ -7,7 +7,7 @@ export interface ExtraItem {
   price: number;
 }
 
-export type PizzaPricingStrategy = 'highestFlavor' | 'averageFlavor' | 'sumDeltas' | 'fixedBySize';
+export type PizzaPricingStrategy = 'highestFlavor' | 'averageFlavor' | 'fixedBySize';
 
 export interface PizzaSizeOption {
   id: string;
@@ -23,12 +23,14 @@ export interface PizzaFlavor {
   description?: string | null;
   imageUrl?: string | null;
   tags: string[];
+  ingredients: string[];
   active: boolean;
   priceDeltaBySize?: Record<string, number> | null;
 }
 
 export interface MenuItem {
   id: string;
+  type?: 'regular' | 'pizza';
   name: string;
   category: string;
   price: number;

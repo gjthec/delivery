@@ -1,15 +1,27 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, MinusCircle, PlusCircle, ShoppingBag, RefreshCw } from 'lucide-react';
+import { X, MinusCircle, PlusCircle, ShoppingBag, RefreshCw, ChevronDown } from 'lucide-react';
 import { ExtraItem, MenuItem, OrderItemPizza, PizzaFlavor } from '../types';
 import { computePizzaPrice, getPizzaSize } from '../modules/customer/utils/pizza-pricing.util';
 
 interface Props {
   item: MenuItem | null;
   pizzaFlavors?: PizzaFlavor[];
-  initialData?: { removedIngredients: string[]; selectedExtras: ExtraItem[]; observations: string; quantity: number; pizzaConfig?: Omit<OrderItemPizza, 'quantity' | 'notes'> } | null;
+  initialData?: {
+    removedIngredients: string[];
+    selectedExtras: ExtraItem[];
+    observations: string;
+    quantity: number;
+    pizzaConfig?: Omit<OrderItemPizza, 'quantity' | 'notes'>;
+  } | null;
   isOpen: boolean;
   onClose: () => void;
-  onAddToCart: (customizations: { removedIngredients: string[]; selectedExtras: ExtraItem[]; observations: string; quantity: number; pizzaConfig?: Omit<OrderItemPizza, 'quantity' | 'notes'> }) => void;
+  onAddToCart: (customizations: {
+    removedIngredients: string[];
+    selectedExtras: ExtraItem[];
+    observations: string;
+    quantity: number;
+    pizzaConfig?: Omit<OrderItemPizza, 'quantity' | 'notes'>;
+  }) => void;
 }
 
 const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData, isOpen, onClose, onAddToCart }) => {
@@ -17,9 +29,13 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
   const [removedIngredients, setRemovedIngredients] = useState<string[]>([]);
   const [selectedExtras, setSelectedExtras] = useState<ExtraItem[]>([]);
   const [observations, setObservations] = useState('');
+
   const [selectedSizeId, setSelectedSizeId] = useState('');
+  const [flavorCountSelected, setFlavorCountSelected] = useState(1);
   const [selectedFlavorIds, setSelectedFlavorIds] = useState<string[]>([]);
+  const [flavorSearch, setFlavorSearch] = useState('');
   const [pizzaWarning, setPizzaWarning] = useState('');
+  const [showIngredients, setShowIngredients] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!isOpen) return;
@@ -27,21 +43,36 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
     setRemovedIngredients(initialData?.removedIngredients || []);
     setSelectedExtras(initialData?.selectedExtras || []);
     setObservations(initialData?.observations || '');
-    setSelectedSizeId(initialData?.pizzaConfig?.sizeId || '');
-    setSelectedFlavorIds(initialData?.pizzaConfig?.flavors?.map((f) => f.id) || []);
+
+    const initialPizza = initialData?.pizzaConfig;
+    setSelectedSizeId(initialPizza?.sizeId || '');
+    const initialFlavors = initialPizza?.flavors?.map((f) => f.id) || [];
+    setSelectedFlavorIds(initialFlavors);
+    setFlavorCountSelected(Math.max(1, initialPizza?.flavorCountSelected || initialFlavors.length || 1));
+    setFlavorSearch('');
     setPizzaWarning('');
+    setShowIngredients({});
   }, [isOpen, initialData, item]);
 
   const isPizza = item?.type === 'pizza';
   const selectedSize = item && selectedSizeId ? getPizzaSize(item, selectedSizeId) : null;
-  const availablePizzaFlavors = useMemo(() => pizzaFlavors.filter((f) => f.active), [pizzaFlavors]);
-  const selectedFlavors = useMemo(
-    () => availablePizzaFlavors.filter((flavor) => selectedFlavorIds.includes(flavor.id)),
-    [availablePizzaFlavors, selectedFlavorIds]
-  );
+  const maxFlavorsAllowed = selectedSize?.maxFlavors || 1;
+
+  const availablePizzaFlavors = useMemo(() => {
+    const q = flavorSearch.trim().toLowerCase();
+    return pizzaFlavors
+      .filter((f) => f.active)
+      .filter((f) => !q || f.name.toLowerCase().includes(q) || f.tags.some((tag) => tag.toLowerCase().includes(q)));
+  }, [pizzaFlavors, flavorSearch]);
+
+  const selectedFlavors = useMemo(() => {
+    return selectedFlavorIds
+      .map((id) => pizzaFlavors.find((flavor) => flavor.id === id))
+      .filter((flavor): flavor is PizzaFlavor => Boolean(flavor));
+  }, [selectedFlavorIds, pizzaFlavors]);
 
   const pizzaUnitPrice = useMemo(() => {
-    if (!item || !isPizza || !selectedSizeId) return item?.price || 0;
+    if (!item || !isPizza || !selectedSizeId || selectedFlavors.length === 0) return item?.price || 0;
     return computePizzaPrice({ baseItem: item, sizeId: selectedSizeId, selectedFlavors });
   }, [item, isPizza, selectedSizeId, selectedFlavors]);
 
@@ -54,19 +85,18 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
 
   if (!item) return null;
 
-  const toggleFlavor = (id: string) => {
-    if (!selectedSize) return;
-
+  const updateFlavorSlot = (slotIndex: number, flavorId: string) => {
     setSelectedFlavorIds((prev) => {
-      if (prev.includes(id)) return prev.filter((currentId) => currentId !== id);
-
-      if (prev.length >= selectedSize.maxFlavors) {
-        setPizzaWarning(`Máximo de ${selectedSize.maxFlavors} sabores para ${selectedSize.label}.`);
+      const next = [...prev];
+      const duplicateIndex = next.findIndex((id, idx) => id === flavorId && idx !== slotIndex);
+      if (duplicateIndex >= 0) {
+        setPizzaWarning('Não é permitido repetir sabores.');
         return prev;
       }
 
+      next[slotIndex] = flavorId;
       setPizzaWarning('');
-      return [...prev, id];
+      return next.slice(0, flavorCountSelected);
     });
   };
 
@@ -76,27 +106,54 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
     if (!nextSize) return;
 
     setSelectedSizeId(sizeId);
-    setSelectedFlavorIds((prev) => {
-      if (prev.length <= nextSize.maxFlavors) return prev;
-      setPizzaWarning(`Alguns sabores foram removidos: máximo ${nextSize.maxFlavors} para ${nextSize.label}.`);
-      return prev.slice(0, nextSize.maxFlavors);
+    setFlavorCountSelected((prev) => {
+      if (prev <= nextSize.maxFlavors) return prev;
+      setPizzaWarning(`Quantidade de sabores ajustada para ${nextSize.maxFlavors} ao trocar o tamanho.`);
+      return nextSize.maxFlavors;
     });
+    setSelectedFlavorIds((prev) => prev.slice(0, nextSize.maxFlavors));
   };
 
-  const canAddPizza = !isPizza || (selectedSize && selectedFlavorIds.length === selectedSize.maxFlavors);
+  const handleFlavorCountChange = (count: number) => {
+    const bounded = Math.max(1, Math.min(count, maxFlavorsAllowed));
+    setFlavorCountSelected(bounded);
+    setSelectedFlavorIds((prev) => prev.slice(0, bounded));
+  };
+
+
+  const toggleIngredient = (ingredient: string) => {
+    setRemovedIngredients((prev) => prev.includes(ingredient)
+      ? prev.filter((current) => current !== ingredient)
+      : [...prev, ingredient]);
+  };
+
+  const toggleExtra = (extra: ExtraItem) => {
+    setSelectedExtras((prev) => prev.some((current) => current.name === extra.name)
+      ? prev.filter((current) => current.name !== extra.name)
+      : [...prev, extra]);
+  };
+
+  const isPizzaReady = Boolean(selectedSizeId)
+    && selectedFlavorIds.length === flavorCountSelected
+    && selectedFlavorIds.every(Boolean);
+
+  const canAddPizza = !isPizza || isPizzaReady;
 
   const handleAdd = () => {
     if (isPizza && item && selectedSize) {
       const pizzaConfig: Omit<OrderItemPizza, 'quantity' | 'notes'> = {
         kind: 'pizza',
         pizzaBaseId: item.id,
+        pizzaName: item.name,
         sizeId: selectedSize.id,
         sizeLabel: selectedSize.label,
         maxFlavors: selectedSize.maxFlavors,
+        flavorCountSelected,
         pricingStrategyUsed: item.pricingStrategy || 'highestFlavor',
         flavors: selectedFlavors.map((flavor) => ({
           id: flavor.id,
           name: flavor.name,
+          ingredients: flavor.ingredients || [],
           priceDeltaApplied: flavor.priceDeltaBySize?.[selectedSize.id] || 0
         })),
         unitPriceComputed: pizzaUnitPrice
@@ -110,6 +167,8 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
     onAddToCart({ removedIngredients, selectedExtras, observations, quantity });
     onClose();
   };
+
+  const consolidatedIngredients = Array.from(new Set(selectedFlavors.flatMap((f) => f.ingredients || [])));
 
   return (
     <div className={`fixed inset-0 z-[200] flex items-end justify-center transition-all duration-500 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
@@ -131,7 +190,7 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
           {isPizza && (
             <>
               <div>
-                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400 mb-3">Etapa A: Tamanho</h3>
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400 mb-3">Etapa 1: Tamanho</h3>
                 <div className="grid grid-cols-2 gap-3">
                   {(item.sizes || []).map((size) => (
                     <button key={size.id} onClick={() => handleSizeChange(size.id)} className={`p-4 rounded-2xl border-2 text-left ${selectedSizeId === size.id ? 'border-orange-500 bg-orange-50/40 dark:bg-orange-500/10' : 'border-zinc-200 dark:border-zinc-800'}`}>
@@ -143,20 +202,103 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
               </div>
 
               <div>
-                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400 mb-3">Etapa B: Sabores</h3>
-                <div className="grid grid-cols-1 gap-3 max-h-56 overflow-y-auto">
-                  {availablePizzaFlavors.map((flavor) => {
-                    const selected = selectedFlavorIds.includes(flavor.id);
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400 mb-3">Etapa 2: Quantidade de sabores</h3>
+                <div className="flex gap-2 flex-wrap">
+                  {Array.from({ length: maxFlavorsAllowed }, (_, idx) => idx + 1).map((count) => (
+                    <button
+                      key={count}
+                      onClick={() => handleFlavorCountChange(count)}
+                      className={`px-4 py-2 rounded-xl border-2 text-xs font-black ${flavorCountSelected === count ? 'border-orange-500 text-orange-600 bg-orange-50/50' : 'border-zinc-200 dark:border-zinc-800 text-zinc-500'}`}
+                    >
+                      {count} sabor{count > 1 ? 'es' : ''}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400 mb-3">Etapa 3: Escolher sabores</h3>
+                <input
+                  value={flavorSearch}
+                  onChange={(e) => setFlavorSearch(e.target.value)}
+                  placeholder="Buscar sabor por nome/tag"
+                  className="w-full mb-3 bg-zinc-50 dark:bg-zinc-900 rounded-2xl p-3 text-sm"
+                />
+
+                <div className="space-y-3">
+                  {Array.from({ length: flavorCountSelected }, (_, slotIndex) => {
+                    const selectedFlavorId = selectedFlavorIds[slotIndex] || '';
+                    const selectedFlavor = pizzaFlavors.find((f) => f.id === selectedFlavorId);
                     return (
-                      <button key={flavor.id} onClick={() => toggleFlavor(flavor.id)} className={`p-3 rounded-2xl border-2 text-left ${selected ? 'border-orange-500' : 'border-zinc-200 dark:border-zinc-800'}`}>
-                        <p className="font-bold">{flavor.name}</p>
-                      </button>
+                      <div key={`slot-${slotIndex}`} className="p-3 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/40">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Sabor {slotIndex + 1}</label>
+                        <select
+                          value={selectedFlavorId}
+                          onChange={(e) => updateFlavorSlot(slotIndex, e.target.value)}
+                          className="w-full mt-2 bg-zinc-50 dark:bg-zinc-900 rounded-xl p-3 text-sm"
+                        >
+                          <option value="">Selecione um sabor</option>
+                          {availablePizzaFlavors.map((flavor) => (
+                            <option key={flavor.id} value={flavor.id}>{flavor.name}</option>
+                          ))}
+                        </select>
+
+                        {selectedFlavor && (
+                          <button
+                            type="button"
+                            onClick={() => setShowIngredients((prev) => ({ ...prev, [selectedFlavor.id]: !prev[selectedFlavor.id] }))}
+                            className="mt-2 text-[11px] font-bold text-zinc-500 flex items-center gap-1"
+                          >
+                            Ingredientes do sabor <ChevronDown size={12} className={showIngredients[selectedFlavor.id] ? 'rotate-180' : ''} />
+                          </button>
+                        )}
+                        {selectedFlavor && showIngredients[selectedFlavor.id] && (
+                          <p className="text-[11px] text-zinc-500 mt-1">{selectedFlavor.ingredients?.join(', ') || 'Sem ingredientes informados.'}</p>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
-                <p className="text-xs mt-2 text-zinc-500">Selecionados: {selectedFlavorIds.length}/{selectedSize?.maxFlavors || 0}</p>
-                {pizzaWarning && <p className="text-xs text-orange-600 font-bold mt-1">{pizzaWarning}</p>}
+                {pizzaWarning && <p className="text-xs text-orange-600 font-bold mt-2">{pizzaWarning}</p>}
               </div>
+
+              <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
+                <p className="text-xs font-black uppercase tracking-widest text-zinc-400">Resumo</p>
+                <p className="text-sm font-bold text-zinc-700 dark:text-zinc-200 mt-1">{selectedSize ? `${selectedSize.label} • ${selectedFlavors.map((f) => f.name).join(', ')}` : 'Selecione o tamanho e sabores'}</p>
+                {consolidatedIngredients.length > 0 && (
+                  <p className="text-[11px] text-zinc-500 mt-1">Ingredientes: {consolidatedIngredients.join(', ')}</p>
+                )}
+              </div>
+            </>
+          )}
+
+          {!isPizza && (
+            <>
+              {item.ingredients && item.ingredients.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400 mb-3">Retirar ingredientes</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {item.ingredients.map((ingredient) => (
+                      <button key={ingredient} onClick={() => toggleIngredient(ingredient)} className={`px-3 py-2 rounded-xl border text-xs font-bold ${removedIngredients.includes(ingredient) ? 'border-orange-500 text-orange-600' : 'border-zinc-200 dark:border-zinc-800 text-zinc-500'}`}>{ingredient}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {item.extras && item.extras.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400 mb-3">Adicionais</h3>
+                  <div className="space-y-2">
+                    {item.extras.map((extra) => (
+                      <button key={extra.name} onClick={() => toggleExtra(extra)} className={`w-full p-3 rounded-xl border text-left text-sm font-bold flex justify-between ${selectedExtras.some((current) => current.name === extra.name) ? 'border-orange-500 text-orange-600' : 'border-zinc-200 dark:border-zinc-800 text-zinc-500'}`}>
+                        <span>{extra.name}</span>
+                        <span>+ R$ {extra.price.toFixed(2)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
             </>
           )}
 

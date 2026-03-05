@@ -24,10 +24,6 @@ export function computePizzaPrice({ baseItem, sizeId, selectedFlavors }: Compute
   if (strategy === 'fixedBySize') return size.basePrice;
   if (deltas.length === 0) return size.basePrice;
 
-  if (strategy === 'sumDeltas') {
-    return size.basePrice + deltas.reduce((acc, delta) => acc + delta, 0);
-  }
-
   if (strategy === 'averageFlavor') {
     const total = deltas.reduce((acc, delta) => acc + delta, 0);
     return size.basePrice + (total / deltas.length);

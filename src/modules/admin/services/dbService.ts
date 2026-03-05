@@ -109,7 +109,7 @@ export const dbMenu = {
     return getLocal(KEYS.MENU, []);
   },
   save: async (item: MenuItem): Promise<void> => {
-    const sanitized = sanitizeData(item);
+    const sanitized = sanitizeData({ ...item, tags: item.tags || [], ingredients: item.ingredients || [], active: item.active !== false, priceDeltaBySize: item.priceDeltaBySize || null });
     if (db) {
       try {
         await setDoc(doc(db, ...ROOT_PATH, 'menu', sanitized.id), sanitized);
@@ -863,7 +863,8 @@ export const dbPizzaFlavors = {
         const snapshot = await getDocs(collection(db, ...ROOT_PATH, 'pizzaFlavors'));
         const items: PizzaFlavor[] = [];
         snapshot.forEach((docSnap) => {
-          items.push({ ...(docSnap.data() as PizzaFlavor), id: docSnap.id });
+          const payload = docSnap.data() as PizzaFlavor;
+          items.push({ ...payload, id: docSnap.id, tags: Array.isArray(payload.tags) ? payload.tags : [], ingredients: Array.isArray(payload.ingredients) ? payload.ingredients : [], active: typeof payload.active === 'boolean' ? payload.active : true, priceDeltaBySize: payload.priceDeltaBySize || null });
         });
         setLocal(localKey, items);
         return items;
@@ -876,7 +877,7 @@ export const dbPizzaFlavors = {
   },
   save: async (item: PizzaFlavor): Promise<void> => {
     const localKey = 'platform_pizza_flavors_v1';
-    const sanitized = sanitizeData(item);
+    const sanitized = sanitizeData({ ...item, tags: item.tags || [], ingredients: item.ingredients || [], active: item.active !== false, priceDeltaBySize: item.priceDeltaBySize || null });
 
     if (db) {
       try {
