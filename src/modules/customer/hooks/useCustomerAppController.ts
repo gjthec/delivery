@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CATEGORIES, IS_FIREBASE_ON, MENU_ITEMS } from '../../../constants';
+import { CATEGORIES, IS_FIREBASE_ON } from '../../../constants';
 import { useStorefrontData } from '../../../hooks/useStorefrontData';
 import { askWaiter } from '../../../services/geminiService';
 import { clearUserNotificationsFromFirebase, subscribeToUserNotifications } from '../../../services/firebaseService';
 import { AdminNotification, CartItem, CheckoutDetails, ExtraItem, MenuItem } from '../../../types';
 import { generateOrderId, calculateCartTotal, processOrderToDatabase, sendWhatsAppMessage } from '../services/order-flow.service';
 import { AiSuggestion, CheckoutSession } from '../types/customer-app.types';
+import { useCustomerMenuItems } from './useCustomerMenuItems';
 
 export function useCustomerAppController() {
   const { data: storefrontData, loading: isLoadingData, error: storefrontError } = useStorefrontData();
-  const menuItems = storefrontData.products.length > 0 ? storefrontData.products : MENU_ITEMS;
+  const { items: realMenuItems, loading: isLoadingMenu, error: menuError } = useCustomerMenuItems();
+  const menuItems = realMenuItems;
   const categories = storefrontData.categories.length > 0 ? storefrontData.categories : CATEGORIES;
   const deliveryFee = typeof storefrontData.deliverySettings?.deliveryFee === 'number' ? storefrontData.deliverySettings.deliveryFee : 5.90;
 
@@ -213,8 +215,8 @@ export function useCustomerAppController() {
     menuItems,
     categories,
     deliveryFee,
-    isLoadingData,
-    storefrontError,
+    isLoadingData: isLoadingData || isLoadingMenu,
+    storefrontError: menuError || storefrontError,
     searchQuery,
     setSearchQuery,
     activeCategory,
