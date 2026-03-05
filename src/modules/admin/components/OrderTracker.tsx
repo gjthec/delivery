@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Order, OrderStatus, MenuItem, CartItem, ExtraItem } from '../types';
 import { dbOrders, dbMenu } from '../services/dbService';
 import { INITIAL_CATEGORIES } from '../mockData';
+import StandardDialog from '../../../components/modals/StandardDialog';
 import { 
   Clock, Package, Truck, CheckCircle2, XCircle, Search, 
   PlusCircle, Play, X, User, MapPin, CreditCard, ShoppingBag,
@@ -42,6 +43,7 @@ const OrderTracker: React.FC<OrderTrackerProps> = ({ externalSelectedOrderId, on
   const [newOrderCustomer, setNewOrderCustomer] = useState('');
   const [newOrderCart, setNewOrderCart] = useState<CartItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>(INITIAL_CATEGORIES[0].name);
+  const [createOrderWarningOpen, setCreateOrderWarningOpen] = useState(false);
 
   useEffect(() => {
     loadOrders();
@@ -136,7 +138,7 @@ const OrderTracker: React.FC<OrderTrackerProps> = ({ externalSelectedOrderId, on
 
   const handleCreateOrder = async () => {
     if (!newOrderCustomer.trim() || newOrderCart.length === 0) {
-      alert("Preencha o nome do cliente e adicione itens.");
+      setCreateOrderWarningOpen(true);
       return;
     }
 
@@ -190,6 +192,15 @@ const OrderTracker: React.FC<OrderTrackerProps> = ({ externalSelectedOrderId, on
   };
 
   return (
+    <>
+      <StandardDialog
+        isOpen={createOrderWarningOpen}
+        title="Pedido incompleto"
+        message="Preencha o nome do cliente e adicione itens."
+        onClose={() => setCreateOrderWarningOpen(false)}
+        variant="warning"
+      />
+
     <div className="space-y-8 pb-20">
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6">
         <div>
@@ -530,6 +541,7 @@ const OrderTracker: React.FC<OrderTrackerProps> = ({ externalSelectedOrderId, on
           </div>
       )}
     </div>
+    </>
   );
 };
 

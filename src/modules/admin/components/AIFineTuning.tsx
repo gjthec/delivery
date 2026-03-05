@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Sparkles, MessageSquare, History, Settings2, Save, Bot } from 'lucide-react';
 import { testAiWaiter } from '../services/geminiService';
 import { INITIAL_MENU } from '../mockData';
+import StandardDialog from '../../../components/modals/StandardDialog';
 
 const DEFAULT_SYSTEM_PROMPT = `Você é um garçom virtual prestativo e profissional da "Sua Plataforma".
 Seu objetivo é sugerir itens do cardápio, lidar com pedidos educadamente e fornecer descrições úteis.
@@ -16,6 +17,7 @@ const AIFineTuning: React.FC = () => {
   const [testInput, setTestInput] = useState('');
   const [messages, setMessages] = useState<{ role: 'user' | 'ai', content: string, suggestions?: any[] }[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -50,11 +52,20 @@ const AIFineTuning: React.FC = () => {
     setIsSaving(true);
     setTimeout(() => {
       setIsSaving(false);
-      alert('Instrução da IA atualizada com sucesso!');
+      setSaveDialogOpen(true);
     }, 800);
   };
 
   return (
+    <>
+      <StandardDialog
+        isOpen={saveDialogOpen}
+        title="Instrução atualizada"
+        message="Instrução da IA atualizada com sucesso!"
+        onClose={() => setSaveDialogOpen(false)}
+        variant="success"
+      />
+
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-140px)]">
       <div className="bg-white rounded-3xl border border-slate-100 shadow-sm flex flex-col overflow-hidden">
         <div className="p-6 border-b border-slate-50 flex items-center justify-between">
@@ -176,6 +187,7 @@ const AIFineTuning: React.FC = () => {
         </div>
       </div>
     </div>
+    </>
   );
 };
 
