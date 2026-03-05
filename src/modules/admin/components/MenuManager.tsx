@@ -8,7 +8,7 @@ import {
   Check, ChevronDown, Settings, Save, Search, LayoutGrid, Filter, ArrowUpDown,
   TicketPercent, AlertTriangle, Bike
 } from 'lucide-react';
-import { INITIAL_CATEGORIES } from '@/mockData';
+import { INITIAL_CATEGORIES } from '../mockData';
 
 type SortOption = 'category' | 'price-asc' | 'price-desc' | 'name';
 
