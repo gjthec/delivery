@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Loader2, ShoppingBag, X } from 'lucide-react';
-import { FirebaseOrder, fetchOrdersByPhone } from '../services/firebaseService';
+import { useOrders } from '../hooks/useOrders';
 
 interface Props {
   isOpen: boolean;
@@ -9,9 +9,8 @@ interface Props {
 
 const OrdersModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [phone, setPhone] = useState(() => localStorage.getItem('foodai-customer-phone') || '');
-  const [isLoading, setIsLoading] = useState(false);
-  const [orders, setOrders] = useState<FirebaseOrder[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
+  const { orders, loading: isLoading, reload } = useOrders(phone, isOpen && hasSearched);
 
   useEffect(() => {
     if (isOpen && phone) {
@@ -22,14 +21,9 @@ const OrdersModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const handleSearch = async () => {
     if (!phone.trim()) return;
 
-    setIsLoading(true);
     setHasSearched(true);
     localStorage.setItem('foodai-customer-phone', phone);
-
-    const fetchedOrders = await fetchOrdersByPhone(phone);
-    setOrders(fetchedOrders || []);
-
-    setIsLoading(false);
+    await reload();
   };
 
   if (!isOpen) return null;

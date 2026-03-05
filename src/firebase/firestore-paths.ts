@@ -21,6 +21,8 @@ export const productsCollectionRef = (db: Firestore) => tenantCollection(db, 'pr
 export const categoriesCollectionRef = (db: Firestore) => tenantCollection(db, 'categories');
 export const bannersCollectionRef = (db: Firestore) => tenantCollection(db, 'banners');
 export const couponsCollectionRef = (db: Firestore) => tenantCollection(db, 'coupons');
+export const ordersCollectionRef = (db: Firestore) => tenantCollection(db, 'orders');
+export const notificationsCollectionRef = (db: Firestore) => tenantCollection(db, 'notifications');
 
 // Compatibilidade com dados antigos do cardápio.
 export const menuCollectionRef = (db: Firestore) => tenantCollection(db, 'menu');
@@ -29,6 +31,8 @@ export const settingsDocRef = (db: Firestore) => tenantDoc(db, 'settings', 'gene
 export const storeSettingsDocRef = (db: Firestore) => tenantDoc(db, 'settings', 'store');
 export const businessDocRef = (db: Firestore) => tenantDoc(db, 'business', 'info');
 export const deliverySettingsDocRef = (db: Firestore) => tenantDoc(db, 'deliverySettings', 'general');
+export const orderDocRef = (db: Firestore, orderId: string) => tenantDoc(db, 'orders', orderId);
+export const notificationDocRef = (db: Firestore, notificationId: string) => tenantDoc(db, 'notifications', notificationId);
 
 export function tenantPathSegments() {
   return [ROOT_COLLECTION, getTenantId()] as const;
