@@ -135,8 +135,10 @@ export function useCustomerAppController() {
     setIsDetailModalOpen(true);
   };
 
-  const handleCheckout = async (details: CheckoutDetails) => {
-    if (cart.length === 0) return;
+  const handleCheckout = async (details: CheckoutDetails): Promise<{ success: boolean; message?: string }> => {
+    if (cart.length === 0) {
+      return { success: false, message: 'Seu carrinho está vazio.' };
+    }
 
     const finalTotal = calculateCartTotal(cart, deliveryFee);
     const orderId = generateOrderId();
@@ -147,15 +149,20 @@ export function useCustomerAppController() {
     let savedToDatabase = false;
     if (IS_FIREBASE_ON) {
       savedToDatabase = await processOrderToDatabase(orderId, details, cart, finalTotal);
+      if (!savedToDatabase) {
+        return { success: false, message: 'Não foi possível salvar seu pedido agora. Tente novamente em instantes.' };
+      }
     }
 
     setCheckoutSession({ orderId, details, total: finalTotal, savedToDatabase });
 
     if (details.payment.type === 'pix') {
       setIsPixModalOpen(true);
+      return { success: true, message: 'Pedido salvo! Agora confirme o pagamento via Pix.' };
     } else {
       sendWhatsAppMessage(details, cart, finalTotal);
       setCart([]);
+      return { success: true, message: 'Pedido finalizado com sucesso!' };
     }
   };
 
