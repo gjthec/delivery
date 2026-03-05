@@ -5,6 +5,7 @@ export interface ExtraItem {
 
 export interface MenuItem {
   id: string;
+  type?: 'regular' | 'pizza';
   name: string;
   category: string;
   price: number;
@@ -18,6 +19,47 @@ export interface MenuItem {
   calories?: number;
   ingredients?: string[];
   extras?: ExtraItem[];
+  pricingStrategy?: PizzaPricingStrategy;
+  sizes?: PizzaSizeOption[];
+}
+
+export type PizzaPricingStrategy = 'highestFlavor' | 'averageFlavor' | 'sumDeltas' | 'fixedBySize';
+
+export interface PizzaSizeOption {
+  id: string;
+  label: string;
+  basePrice: number;
+  maxFlavors: number;
+  slices?: number | null;
+}
+
+export interface PizzaFlavor {
+  id: string;
+  name: string;
+  description?: string | null;
+  imageUrl?: string | null;
+  tags: string[];
+  active: boolean;
+  priceDeltaBySize?: Record<string, number> | null;
+}
+
+export interface OrderItemPizzaFlavor {
+  id: string;
+  name: string;
+  priceDeltaApplied: number;
+}
+
+export interface OrderItemPizza {
+  kind: 'pizza';
+  pizzaBaseId: string;
+  sizeId: string;
+  sizeLabel: string;
+  maxFlavors: number;
+  pricingStrategyUsed: PizzaPricingStrategy;
+  flavors: OrderItemPizzaFlavor[];
+  unitPriceComputed: number;
+  quantity: number;
+  notes?: string | null;
 }
 
 export interface CartItem {
@@ -27,6 +69,7 @@ export interface CartItem {
   removedIngredients: string[];
   selectedExtras: ExtraItem[];
   observations: string;
+  pizzaConfig?: Omit<OrderItemPizza, 'quantity' | 'notes'>;
 }
 
 export interface Category {

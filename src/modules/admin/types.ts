@@ -2,8 +2,29 @@
 export type OrderStatus = 'pending' | 'preparing' | 'shipping' | 'completed' | 'cancelled';
 
 export interface ExtraItem {
+  type?: 'regular' | 'pizza';
   name: string;
   price: number;
+}
+
+export type PizzaPricingStrategy = 'highestFlavor' | 'averageFlavor' | 'sumDeltas' | 'fixedBySize';
+
+export interface PizzaSizeOption {
+  id: string;
+  label: string;
+  basePrice: number;
+  maxFlavors: number;
+  slices?: number | null;
+}
+
+export interface PizzaFlavor {
+  id: string;
+  name: string;
+  description?: string | null;
+  imageUrl?: string | null;
+  tags: string[];
+  active: boolean;
+  priceDeltaBySize?: Record<string, number> | null;
 }
 
 export interface MenuItem {
@@ -22,6 +43,8 @@ export interface MenuItem {
   calories?: number;
   ingredients: string[];
   extras: ExtraItem[];
+  pricingStrategy?: PizzaPricingStrategy;
+  sizes?: PizzaSizeOption[];
 }
 
 export interface Category {

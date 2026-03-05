@@ -3,10 +3,11 @@ import { CATEGORIES, IS_FIREBASE_ON } from '../../../constants';
 import { useStorefrontData } from '../../../hooks/useStorefrontData';
 import { askWaiter } from '../../../services/geminiService';
 import { clearUserNotificationsFromFirebase, subscribeToUserNotifications } from '../../../services/firebaseService';
-import { AdminNotification, CartItem, CheckoutDetails, ExtraItem, MenuItem } from '../../../types';
+import { AdminNotification, CartItem, CheckoutDetails, ExtraItem, MenuItem, OrderItemPizza, PizzaFlavor } from '../../../types';
 import { generateOrderId, calculateCartTotal, processOrderToDatabase, sendWhatsAppMessage } from '../services/order-flow.service';
 import { AiSuggestion, CheckoutSession } from '../types/customer-app.types';
 import { useCustomerMenuItems } from './useCustomerMenuItems';
+import { getActivePizzaFlavors } from '../services/pizza.service';
 
 export function useCustomerAppController() {
   const { data: storefrontData, loading: isLoadingData, error: storefrontError } = useStorefrontData();
@@ -34,6 +35,7 @@ export function useCustomerAppController() {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
+  const [pizzaFlavors, setPizzaFlavors] = useState<PizzaFlavor[]>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const [darkMode, setDarkMode] = useState(() => {
@@ -67,6 +69,13 @@ export function useCustomerAppController() {
     return () => unsubscribe();
   }, []);
 
+
+  useEffect(() => {
+    getActivePizzaFlavors()
+      .then(setPizzaFlavors)
+      .catch(() => setPizzaFlavors([]));
+  }, []);
+
   const filteredItems = useMemo(() => menuItems.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.description.toLowerCase().includes(searchQuery.toLowerCase());
@@ -85,7 +94,8 @@ export function useCustomerAppController() {
     removedIngredients: cart[editingCartIndex].removedIngredients,
     selectedExtras: cart[editingCartIndex].selectedExtras,
     observations: cart[editingCartIndex].observations,
-    quantity: cart[editingCartIndex].quantity
+    quantity: cart[editingCartIndex].quantity,
+    pizzaConfig: cart[editingCartIndex].pizzaConfig
   } : null;
 
   const shouldHideFooter = isCartOpen || isPixModalOpen || isDetailModalOpen || isSearchFocused;
@@ -94,7 +104,7 @@ export function useCustomerAppController() {
     .filter(cartItem => cartItem.item.id === itemId)
     .reduce((acc, curr) => acc + curr.quantity, 0);
 
-  const saveToCart = (item: MenuItem, quantity: number, removedIngredients: string[], selectedExtras: ExtraItem[], observations: string) => {
+  const saveToCart = (item: MenuItem, quantity: number, removedIngredients: string[], selectedExtras: ExtraItem[], observations: string, pizzaConfig?: Omit<OrderItemPizza, 'quantity' | 'notes'>) => {
     if (editingCartIndex !== null) {
       const updatedCart = [...cart];
       updatedCart[editingCartIndex] = {
@@ -102,7 +112,8 @@ export function useCustomerAppController() {
         quantity,
         removedIngredients,
         selectedExtras,
-        observations
+        observations,
+        pizzaConfig
       };
       setCart(updatedCart);
       setEditingCartIndex(null);
@@ -113,7 +124,8 @@ export function useCustomerAppController() {
         quantity,
         removedIngredients,
         selectedExtras,
-        observations
+        observations,
+        pizzaConfig
       };
       setCart(prev => [...prev, newCartItem]);
     }
@@ -257,6 +269,7 @@ export function useCustomerAppController() {
     currentInitialData,
     shouldHideFooter,
     getItemCountInCart,
+    pizzaFlavors,
     saveToCart,
     openItemDetails,
     handleEditCartItem,

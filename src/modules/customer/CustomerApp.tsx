@@ -16,6 +16,7 @@ import { useCustomerAppController } from './hooks/useCustomerAppController';
 const CustomerApp: React.FC = () => {
   const {
     menuItems,
+    pizzaFlavors,
     categories,
     deliveryFee,
     isLoadingData,
@@ -118,9 +119,10 @@ const CustomerApp: React.FC = () => {
         item={selectedItem}
         initialData={currentInitialData}
         onClose={() => { setIsDetailModalOpen(false); setEditingCartIndex(null); }}
+        pizzaFlavors={pizzaFlavors}
         onAddToCart={(custom) => {
           if (selectedItem) {
-            saveToCart(selectedItem, custom.quantity, custom.removedIngredients, custom.selectedExtras, custom.observations);
+            saveToCart(selectedItem, custom.quantity, custom.removedIngredients, custom.selectedExtras, custom.observations, custom.pizzaConfig);
           }
         }}
       />

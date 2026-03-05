@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MenuItem, ExtraItem, Coupon } from '../types';
+import { MenuItem, ExtraItem, Coupon, PizzaFlavor, PizzaSizeOption } from '../types';
 import { improveMenuItem } from '../services/aiService'; // Adjusted path
-import { dbMenu, dbCatalog, dbCoupons, dbSettings } from '../services/dbService'; // Adjusted path
+import { dbMenu, dbCatalog, dbCoupons, dbSettings, dbPizzaFlavors } from '../services/dbService'; // Adjusted path
 import { 
   Plus, Edit2, Trash2, X, Sparkles, RefreshCw, 
   Image as ImageIcon, Tag, List, PlusCircle, MinusCircle, DollarSign,
@@ -27,6 +27,8 @@ const MenuManager: React.FC = () => {
 
   // Store Settings State
   const [deliveryFee, setDeliveryFee] = useState<string>('');
+  const [pizzaFlavors, setPizzaFlavors] = useState<PizzaFlavor[]>([]);
+  const [pizzaFlavorDraft, setPizzaFlavorDraft] = useState<PizzaFlavor>({ id: '', name: '', description: '', imageUrl: '', tags: [], active: true, priceDeltaBySize: null });
 
   // View & Sort States
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -58,7 +60,10 @@ const MenuManager: React.FC = () => {
     size: 'M' as 'P' | 'M' | 'G',
     tags: [] as string[],
     ingredients: [] as string[],
-    extras: [] as ExtraItem[]
+    extras: [] as ExtraItem[],
+    type: 'regular' as 'regular' | 'pizza',
+    pricingStrategy: 'highestFlavor' as 'highestFlavor' | 'averageFlavor' | 'sumDeltas' | 'fixedBySize',
+    sizes: [] as PizzaSizeOption[]
   });
 
   const [newTag, setNewTag] = useState('');
@@ -94,7 +99,8 @@ const MenuManager: React.FC = () => {
       await Promise.all([
         loadCatalogs(menuData),
         loadCoupons(),
-        loadSettings()
+        loadSettings(),
+        loadPizzaFlavors()
       ]);
     };
 
@@ -145,6 +151,12 @@ const MenuManager: React.FC = () => {
   const loadCoupons = async () => {
     const data = await dbCoupons.getAll();
     setCoupons(data);
+  };
+
+
+  const loadPizzaFlavors = async () => {
+    const data = await dbPizzaFlavors.getAll();
+    setPizzaFlavors(data);
   };
 
   const loadSettings = async () => {
@@ -293,7 +305,10 @@ const MenuManager: React.FC = () => {
       size: formData.size,
       tags: formData.tags,
       ingredients: formData.ingredients,
-      extras: formData.extras
+      extras: formData.extras,
+      type: formData.type,
+      pricingStrategy: formData.pricingStrategy,
+      sizes: formData.type === 'pizza' ? formData.sizes : []
     };
 
     await Promise.all([
@@ -321,7 +336,10 @@ const MenuManager: React.FC = () => {
       size: 'M',
       tags: [],
       ingredients: [],
-      extras: []
+      extras: [],
+      type: 'regular',
+      pricingStrategy: 'highestFlavor',
+      sizes: []
     });
     setEditingId(null);
     setIsAddingCategory(false);
@@ -379,6 +397,28 @@ const MenuManager: React.FC = () => {
     } 
   };
   const removeExtra = (index: number) => { setFormData(p => ({ ...p, extras: p.extras.filter((_, i) => i !== index) })); };
+
+  const addPizzaSize = () => {
+    setFormData((prev) => ({
+      ...prev,
+      sizes: [...prev.sizes, { id: `S${prev.sizes.length + 1}`, label: `Tamanho ${prev.sizes.length + 1}`, basePrice: 0, maxFlavors: 2, slices: null }]
+    }));
+  };
+
+  const updatePizzaSize = (index: number, field: keyof PizzaSizeOption, value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      sizes: prev.sizes.map((size, i) => i === index ? ({ ...size, [field]: field === 'basePrice' || field === 'maxFlavors' || field === 'slices' ? Number(value) : value }) : size)
+    }));
+  };
+
+  const savePizzaFlavor = async () => {
+    if (!pizzaFlavorDraft.name.trim()) return;
+    const id = pizzaFlavorDraft.id || `flavor-${Date.now()}`;
+    await dbPizzaFlavors.save({ ...pizzaFlavorDraft, id, tags: pizzaFlavorDraft.tags || [], active: pizzaFlavorDraft.active !== false });
+    setPizzaFlavorDraft({ id: '', name: '', description: '', imageUrl: '', tags: [], active: true, priceDeltaBySize: null });
+    loadPizzaFlavors();
+  };
 
   // --- GERENCIAMENTO GLOBAL ---
 
@@ -801,6 +841,14 @@ const MenuManager: React.FC = () => {
                         <input value={formData.name} onChange={e => setFormData(p => ({...p, name: e.target.value}))} className="w-full bg-stone-50 dark:bg-stone-800 p-4 rounded-2xl border border-stone-200 dark:border-stone-700 font-bold outline-none focus:border-orange-500 dark:text-white" placeholder="Ex: Burger Supremo" />
                       </div>
 
+                      <div className="space-y-2"> 
+                        <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Tipo do Item</label>
+                        <select value={formData.type} onChange={e => setFormData(p => ({ ...p, type: e.target.value as 'regular' | 'pizza' }))} className="w-full bg-stone-50 dark:bg-stone-800 p-4 rounded-2xl border border-stone-200 dark:border-stone-700 font-bold outline-none focus:border-orange-500 dark:text-white">
+                          <option value="regular">Produto comum</option>
+                          <option value="pizza">Pizza configurável</option>
+                        </select>
+                      </div>
+
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className={`space-y-2 ${isAddingCategory ? 'sm:col-span-2' : ''}`}>
                           <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Categoria</label>
@@ -1075,6 +1123,24 @@ const MenuManager: React.FC = () => {
                           >
                              Salvar
                           </button>
+                      </div>
+                  </div>
+
+                  <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-3xl p-5 mb-6 space-y-4">
+                      <h3 className="text-xs font-black uppercase tracking-[0.2em] text-stone-400">Sabores de Pizza</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <input
+                          value={pizzaFlavorDraft.name}
+                          onChange={(e) => setPizzaFlavorDraft((prev) => ({ ...prev, name: e.target.value }))}
+                          className="bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700 font-bold"
+                          placeholder="Nome do sabor"
+                        />
+                        <button onClick={savePizzaFlavor} className="px-4 py-3 rounded-2xl bg-orange-500 text-white font-black uppercase text-[10px]">Salvar sabor</button>
+                      </div>
+                      <div className="max-h-40 overflow-y-auto space-y-2">
+                        {pizzaFlavors.map((flavor) => (
+                          <div key={flavor.id} className="text-xs font-bold text-stone-500">{flavor.name} {flavor.active ? '' : '(inativo)'}</div>
+                        ))}
                       </div>
                   </div>
 

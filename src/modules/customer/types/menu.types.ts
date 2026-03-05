@@ -3,6 +3,16 @@ export interface MenuItemExtra {
   price: number;
 }
 
+export interface PizzaSizeSource {
+  id: string;
+  label: string;
+  basePrice: number;
+  maxFlavors: number;
+  slices?: number | null;
+}
+
+export type PizzaPricingStrategy = 'highestFlavor' | 'averageFlavor' | 'sumDeltas' | 'fixedBySize';
+
 export interface MenuItemSource {
   id: string;
   name: string;
@@ -19,4 +29,8 @@ export interface MenuItemSource {
   size: string | null;
   tags: string[];
   active: boolean;
+
+  type?: 'regular' | 'pizza';
+  pricingStrategy?: PizzaPricingStrategy;
+  sizes?: PizzaSizeSource[];
 }

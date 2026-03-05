@@ -10,6 +10,13 @@ export function sendWhatsAppMessage(details: CheckoutDetails, items: CartItem[],
   let message = `*🍔 NOVO PEDIDO - ${companyName}*%0A%0A`;
   message += `*Itens do Pedido:*%0A`;
   items.forEach(ci => {
+    if (ci.pizzaConfig) {
+      const flavors = ci.pizzaConfig.flavors.map((flavor) => flavor.name).join(', ');
+      message += `• ${ci.quantity}x ${ci.item.name} (${ci.pizzaConfig.sizeLabel}) - ${flavors}%0A`;
+      if (ci.observations) message += `   _Obs: ${ci.observations}_%0A`;
+      return;
+    }
+
     const extras = ci.selectedExtras.length > 0 ? ` (+ ${ci.selectedExtras.map(e => e.name).join(', ')})` : '';
     const removed = ci.removedIngredients.length > 0 ? ` (sem ${ci.removedIngredients.join(', ')})` : '';
     message += `• ${ci.quantity}x ${ci.item.name}${extras}${removed}%0A`;
@@ -42,6 +49,10 @@ export function generateOrderId() {
 
 export function calculateCartTotal(cart: CartItem[], deliveryFee: number) {
   const subtotal = cart.reduce((acc, ci) => {
+    if (ci.pizzaConfig) {
+      return acc + (ci.pizzaConfig.unitPriceComputed * ci.quantity);
+    }
+
     const extrasTotal = ci.selectedExtras.reduce((ea, ec) => ea + ec.price, 0);
     return acc + ((ci.item.price + extrasTotal) * ci.quantity);
   }, 0);
