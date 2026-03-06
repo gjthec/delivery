@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MenuItem, ExtraItem, Coupon, PizzaFlavor, PizzaSizeOption, Ingredient } from '../types';
+import { improveMenuItem } from '../services/aiService'; // Adjusted path
 import { dbMenu, dbCatalog, dbCoupons, dbSettings, dbPizzaFlavors, dbIngredientsCatalog } from '../services/dbService'; // Adjusted path
 import { 
-  Plus, Edit2, Trash2, X, 
+  Plus, Edit2, Trash2, X, Sparkles, RefreshCw,
   Image as ImageIcon, Tag, List, PlusCircle, MinusCircle, DollarSign,
   Check, ChevronDown, Settings, Save, Search, LayoutGrid, Filter, ArrowUpDown,
   TicketPercent, AlertTriangle, Bike
@@ -50,6 +51,7 @@ const MenuManager: React.FC = () => {
   const [dirtyNormal, setDirtyNormal] = useState(false);
   const [dirtyPizza, setDirtyPizza] = useState(false);
   const [normalBaseline, setNormalBaseline] = useState('');
+  const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
   
   // States para painel de gerenciamento global
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -543,6 +545,22 @@ const MenuManager: React.FC = () => {
         setFormData(prev => ({ ...prev, category: name }));
         setNewCategoryName('');
         setIsAddingCategory(false);
+    }
+  };
+
+  const handleAIOptimize = async () => {
+    if (!formData.name) return;
+    setIsGeneratingDescription(true);
+    try {
+      const result = await improveMenuItem({ ...formData, id: editingId || 'temp', price: parseFloat(formData.price || '0'), rating: 5, preparationTime: '20min' } as any);
+      setFormData(prev => ({
+        ...prev,
+        name: result.newName,
+        description: result.descriptionLong,
+        tags: Array.from(new Set([...prev.tags, ...result.tags]))
+      }));
+    } finally {
+      setIsGeneratingDescription(false);
     }
   };
 
@@ -1144,6 +1162,7 @@ const MenuManager: React.FC = () => {
                       <h3 className="text-[10px] font-black uppercase text-stone-400 tracking-[0.2em] flex items-center gap-2">
                         <List size={14} className="text-orange-500" /> Informações principais
                       </h3>
+                      <p className="text-xs text-stone-400">Preencha o básico para cadastrar o item no cardápio.</p>
                       
                       <div className="space-y-2">
                         <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Nome do item</label>
@@ -1240,10 +1259,15 @@ const MenuManager: React.FC = () => {
                       <h3 className="text-[10px] font-black uppercase text-stone-400 tracking-[0.2em] flex items-center gap-2">
                         <DollarSign size={14} className="text-orange-500" /> Preço
                       </h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <p className="text-xs text-stone-400">Defina os valores do item.</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="space-y-2">
                           <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Preço de venda</label>
                           <input type="number" value={formData.price} onChange={e => setFormData(p => ({...p, price: e.target.value}))} className="w-full bg-stone-50 dark:bg-stone-800 p-4 rounded-2xl border border-stone-200 dark:border-stone-700 font-black text-orange-600" />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Custo unitário</label>
+                          <input type="number" value={formData.costPrice} onChange={e => setFormData(p => ({...p, costPrice: e.target.value}))} className="w-full bg-stone-50 dark:bg-stone-800 p-4 rounded-2xl border border-stone-200 dark:border-stone-700 font-bold dark:text-white" placeholder="R$ 0,00" />
                         </div>
                         <div className="space-y-2">
                           <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Preço promocional ou de antes</label>
@@ -1279,8 +1303,14 @@ const MenuManager: React.FC = () => {
                     )}
 
                     <div className="space-y-4">
-                      <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Descrição</label>
-                      <textarea rows={5} value={formData.description} onChange={e => setFormData(p => ({...p, description: e.target.value}))} className="w-full bg-stone-50 dark:bg-stone-800 p-4 rounded-2xl border border-stone-200 dark:border-stone-700 font-medium text-sm leading-relaxed outline-none focus:border-orange-500 dark:text-white" placeholder="Descreva o item de forma simples" />
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Descrição</label>
+                        <button onClick={handleAIOptimize} disabled={isGeneratingDescription} className="px-3 py-1.5 rounded-xl border border-orange-200 bg-orange-50 text-orange-600 text-[10px] font-black uppercase flex items-center gap-1.5 w-fit disabled:opacity-60">
+                          {isGeneratingDescription ? <RefreshCw className="animate-spin" size={12}/> : <Sparkles size={12}/>} Gerar com IA
+                        </button>
+                      </div>
+                      <p className="text-xs text-stone-400">Explique o item de forma simples ou gere um texto com IA.</p>
+                      <textarea rows={5} value={formData.description} onChange={e => setFormData(p => ({...p, description: e.target.value}))} className="w-full bg-stone-50 dark:bg-stone-800 p-4 rounded-2xl border border-stone-200 dark:border-stone-700 font-medium text-sm leading-relaxed outline-none focus:border-orange-500 dark:text-white" placeholder="Descreva o sabor, os ingredientes ou os diferenciais do item" />
                     </div>
                   </div>
 
@@ -1383,11 +1413,6 @@ const MenuManager: React.FC = () => {
                           </div>
                         ))}
                       </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Custo unitário</label>
-                      <input type="number" value={formData.costPrice} onChange={e => setFormData(p => ({...p, costPrice: e.target.value}))} className="w-full bg-white dark:bg-stone-900 p-4 rounded-2xl border border-stone-200 dark:border-stone-700 font-bold dark:text-white" placeholder="Opcional" />
                     </div>
 
                     {/* Adicionais */}
