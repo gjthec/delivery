@@ -11,6 +11,7 @@ import {
 import { INITIAL_CATEGORIES } from '../mockData';
 import PizzaConfiguratorContent from '../pizza/PizzaConfiguratorContent';
 import { FieldLabel } from './FieldHelp';
+import { uploadImageToCloudinary } from '../services/cloudinaryUpload';
 
 type SortOption = 'category' | 'price-asc' | 'price-desc' | 'name';
 
@@ -70,6 +71,7 @@ const MenuManager: React.FC = () => {
     originalPrice: '',
     description: '',
     imageUrl: '',
+    imagePublicId: '',
     size: 'M' as 'P' | 'M' | 'G',
     tags: [] as string[],
     ingredients: [] as string[],
@@ -82,6 +84,10 @@ const MenuManager: React.FC = () => {
   const [newTag, setNewTag] = useState('');
   const [newIngredient, setNewIngredient] = useState('');
   const [newExtra, setNewExtra] = useState({ name: '', price: '' });
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
+  const [localImagePreview, setLocalImagePreview] = useState<string>('');
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
 
   const [alertModal, setAlertModal] = useState<{ title: string; message: string } | null>(null);
   const [confirmModal, setConfirmModal] = useState<{ title: string; message: string; confirmLabel?: string; variant?: 'danger' | 'default' } | null>(null);
@@ -314,6 +320,7 @@ const MenuManager: React.FC = () => {
       originalPrice: item.originalPrice?.toString() || '',
       description: item.description,
       imageUrl: item.imageUrl,
+      imagePublicId: item.imagePublicId || '',
       size: item.size,
       tags: [...item.tags],
       ingredients: [...item.ingredients],
@@ -323,6 +330,8 @@ const MenuManager: React.FC = () => {
       sizes: item.sizes || []
     });
     setEditingId(item.id);
+    setLocalImagePreview(item.imageUrl || '');
+    setImageUploadError(null);
     setWizardStep(1);
     setNormalBaseline(getNormalSnapshot({
       name: item.name,
@@ -332,6 +341,7 @@ const MenuManager: React.FC = () => {
       originalPrice: item.originalPrice?.toString() || '',
       description: item.description,
       imageUrl: item.imageUrl,
+      imagePublicId: item.imagePublicId || '',
       size: item.size,
       tags: [...item.tags],
       ingredients: [...item.ingredients],
@@ -357,7 +367,22 @@ const MenuManager: React.FC = () => {
     loadMenu();
   };
 
+  const handleImageFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setLocalImagePreview(URL.createObjectURL(file));
+    setImageUploadError(null);
+    setSelectedImageFile(file);
+    event.target.value = '';
+  };
+
   const handleSave = async () => {
+    if (isUploadingImage) {
+      openAlert('Aguarde o upload da imagem terminar para salvar.');
+      return;
+    }
+
     if (!formData.name || (!formData.price && formData.type !== 'pizza')) {
       openAlert("Por favor, preencha nome e preço.");
       return;
@@ -376,6 +401,27 @@ const MenuManager: React.FC = () => {
       }
     }
 
+    let imageUrl = formData.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=800';
+    let imagePublicId = formData.imagePublicId || '';
+
+    if (selectedImageFile) {
+      setIsUploadingImage(true);
+      setImageUploadError(null);
+      try {
+        const uploaded = await uploadImageToCloudinary(selectedImageFile);
+        imageUrl = uploaded.secureUrl;
+        imagePublicId = uploaded.publicId;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Não foi possível enviar a imagem.';
+        setImageUploadError(message);
+        openAlert(message);
+        setIsUploadingImage(false);
+        return;
+      } finally {
+        setIsUploadingImage(false);
+      }
+    }
+
     const payload: MenuItem = {
       id: editingId || `b-${Date.now()}`,
       name: formData.name,
@@ -384,7 +430,8 @@ const MenuManager: React.FC = () => {
       costPrice: formData.costPrice ? parseFloat(formData.costPrice) : undefined,
       originalPrice: formData.originalPrice ? parseFloat(formData.originalPrice) : undefined,
       description: formData.description,
-      imageUrl: formData.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=800',
+      imageUrl,
+      imagePublicId: imagePublicId || undefined,
       rating: 5.0,
       preparationTime: '20 min',
       size: formData.size,
@@ -418,6 +465,7 @@ const MenuManager: React.FC = () => {
       originalPrice: '',
       description: '',
       imageUrl: '',
+      imagePublicId: '',
       size: 'M',
       tags: [],
       ingredients: [],
@@ -435,6 +483,9 @@ const MenuManager: React.FC = () => {
     setNormalBaseline('');
     setIsAddingCategory(false);
     setNewCategoryName('');
+    setImageUploadError(null);
+    setLocalImagePreview('');
+    setSelectedImageFile(null);
   };
 
   const resetNormalFlow = () => {
@@ -446,6 +497,7 @@ const MenuManager: React.FC = () => {
       originalPrice: '',
       description: '',
       imageUrl: '',
+      imagePublicId: '',
       size: 'M',
       tags: [],
       ingredients: [],
@@ -457,6 +509,9 @@ const MenuManager: React.FC = () => {
     setEditingId(null);
     setDirtyNormal(false);
     setNormalBaseline('');
+    setImageUploadError(null);
+    setLocalImagePreview('');
+    setSelectedImageFile(null);
   };
 
   const resetPizzaFlow = () => {
@@ -975,7 +1030,7 @@ const MenuManager: React.FC = () => {
                 <Settings size={18} /> <span className="hidden sm:inline">Global</span>
              </button>
              <button 
-               onClick={() => { resetForm(); setNewItemType('normal'); setFormData((p) => ({ ...p, type: 'regular' })); setNormalBaseline(getNormalSnapshot({ ...formData, name: '', category: categories[0] || 'Burgers', price: '', costPrice: '', originalPrice: '', description: '', imageUrl: '', size: 'M', tags: [], ingredients: [], extras: [], type: 'regular', pricingStrategy: 'highestFlavor', sizes: [] })); setIsModalOpen(true); }} 
+               onClick={() => { resetForm(); setNewItemType('normal'); setFormData((p) => ({ ...p, type: 'regular' })); setNormalBaseline(getNormalSnapshot({ ...formData, name: '', category: categories[0] || 'Burgers', price: '', costPrice: '', originalPrice: '', description: '', imageUrl: '', imagePublicId: '', size: 'M', tags: [], ingredients: [], extras: [], type: 'regular', pricingStrategy: 'highestFlavor', sizes: [] })); setIsModalOpen(true); }} 
                className="flex-1 xl:flex-initial flex items-center justify-center gap-2 bg-orange-500 text-white px-6 py-3 rounded-2xl font-black uppercase text-[10px] shadow-lg shadow-orange-500/20 hover:scale-105 active:scale-95 transition-all whitespace-nowrap"
              >
                <Plus size={18} /> <span className="inline">Novo</span>
@@ -1188,11 +1243,19 @@ const MenuManager: React.FC = () => {
                       </div>
 
                       <div className="space-y-2">
-                        <FieldLabel title="URL da imagem" help="Link da foto exibida no app." helper="Link da foto exibida no cardápio e no app." className="ml-2 space-y-1" />
-                        <div className="relative">
-                          <ImageIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
-                          <input value={formData.imageUrl} onChange={e => setFormData(p => ({...p, imageUrl: e.target.value}))} className="w-full bg-stone-50 dark:bg-stone-800 pl-12 pr-4 py-4 rounded-2xl border border-stone-200 dark:border-stone-700 font-bold outline-none focus:border-orange-500 dark:text-white" placeholder="https://..." />
+                        <FieldLabel title="Imagem" help="Selecione uma foto do seu computador." helper="A imagem será enviada automaticamente para o Cloudinary ao salvar." className="ml-2 space-y-1" />
+                        <div className="flex items-center gap-2">
+                          <label className="px-4 py-3 rounded-2xl bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 font-bold text-sm text-stone-600 dark:text-stone-300 cursor-pointer hover:border-orange-400 transition-all inline-flex items-center gap-2">
+                            <ImageIcon size={16} /> Selecionar imagem
+                            <input type="file" accept="image/*" onChange={handleImageFileChange} className="hidden" />
+                          </label>
+                          {selectedImageFile && <span className="text-[11px] text-stone-500 font-bold truncate max-w-[180px]">{selectedImageFile.name}</span>}
+                          {isUploadingImage && <span className="text-[11px] text-orange-500 font-bold">Enviando imagem...</span>}
                         </div>
+                        {imageUploadError && <p className="text-[11px] text-red-500">{imageUploadError}</p>}
+                        {(localImagePreview || formData.imageUrl) && (
+                          <img src={localImagePreview || formData.imageUrl} alt="Prévia" className="w-20 h-20 rounded-xl object-cover border border-stone-200" />
+                        )}
                       </div>
                     </div>
 
@@ -1222,9 +1285,9 @@ const MenuManager: React.FC = () => {
                         <div className="space-y-2">
                           <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Estratégia de preço</label>
                           <select value={formData.pricingStrategy} onChange={e => setFormData(p => ({ ...p, pricingStrategy: e.target.value as 'highestFlavor' | 'averageFlavor' | 'fixedBySize' }))} className="w-full bg-stone-50 dark:bg-stone-800 p-3 rounded-2xl border border-stone-200 dark:border-stone-700 font-bold">
-                            <option value="highestFlavor">highestFlavor (padrão)</option>
-                            <option value="averageFlavor">averageFlavor</option>
-                            <option value="fixedBySize">fixedBySize</option>
+                            <option value="highestFlavor">Maior sabor (padrão)</option>
+                            <option value="averageFlavor">Média dos sabores</option>
+                            <option value="fixedBySize">Fixo por tamanho</option>
                           </select>
                         </div>
                         <button type="button" onClick={addPizzaSize} className="px-4 py-2 rounded-xl bg-orange-500 text-white text-[10px] font-black uppercase">Adicionar tamanho</button>
