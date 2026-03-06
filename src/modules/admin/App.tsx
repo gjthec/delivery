@@ -10,6 +10,7 @@ import OwnerChat from './components/OwnerChat';
 import ClientesFieis from './components/ClientesFieis';
 import Satisfacao from './components/Satisfacao';
 import Configuracoes from './components/Configuracoes';
+import PizzaFlavorsManager from './components/PizzaFlavorsManager';
 import AdminLogin from './components/AdminLogin';
 import { AppNotification } from './types';
 import { dbGlobalSearch, dbNotifications, GlobalSearchResult } from './services/dbService';
@@ -160,6 +161,7 @@ const App: React.FC = () => {
       case 'clientes-fieis': return <ClientesFieis />;
       case 'satisfacao': return <Satisfacao />;
       case 'configuracoes': return <Configuracoes />;
+      case 'pizza-flavors': return <PizzaFlavorsManager />;
       default: return <Dashboard setActiveTab={setActiveTab} />;
     }
   };

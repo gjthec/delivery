@@ -109,7 +109,7 @@ export const dbMenu = {
     return getLocal(KEYS.MENU, []);
   },
   save: async (item: MenuItem): Promise<void> => {
-    const sanitized = sanitizeData({ ...item, tags: item.tags || [], ingredients: item.ingredients || [], active: item.active !== false, priceDeltaBySize: item.priceDeltaBySize || null });
+    const sanitized = sanitizeData({ ...item, tags: item.tags || [], ingredients: item.ingredients || [], active: item.active !== false, priceDeltaBySize: item.priceDeltaBySize || null, extraPrice: typeof item.extraPrice === 'number' ? item.extraPrice : null, flavorType: item.flavorType === 'Doce' ? 'Doce' : 'Salgado' });
     if (db) {
       try {
         await setDoc(doc(db, ...ROOT_PATH, 'menu', sanitized.id), sanitized);
@@ -864,7 +864,7 @@ export const dbPizzaFlavors = {
         const items: PizzaFlavor[] = [];
         snapshot.forEach((docSnap) => {
           const payload = docSnap.data() as PizzaFlavor;
-          items.push({ ...payload, id: docSnap.id, tags: Array.isArray(payload.tags) ? payload.tags : [], ingredients: Array.isArray(payload.ingredients) ? payload.ingredients.filter((ing) => ing && typeof ing === 'object' && String((ing as { id?: string }).id || '').trim() && String((ing as { name?: string }).name || '').trim()) as Array<{ id: string; name: string }> : [], active: typeof payload.active === 'boolean' ? payload.active : true, priceDeltaBySize: payload.priceDeltaBySize || null });
+          items.push({ ...payload, id: docSnap.id, tags: Array.isArray(payload.tags) ? payload.tags : [], ingredients: Array.isArray(payload.ingredients) ? payload.ingredients.filter((ing) => ing && typeof ing === 'object' && String((ing as { id?: string }).id || '').trim() && String((ing as { name?: string }).name || '').trim()) as Array<{ id: string; name: string }> : [], active: typeof payload.active === 'boolean' ? payload.active : true, priceDeltaBySize: payload.priceDeltaBySize || null, extraPrice: typeof payload.extraPrice === 'number' ? payload.extraPrice : null, flavorType: payload.flavorType === 'Doce' ? 'Doce' : 'Salgado' });
         });
         setLocal(localKey, items);
         return items;
@@ -877,7 +877,7 @@ export const dbPizzaFlavors = {
   },
   save: async (item: PizzaFlavor): Promise<void> => {
     const localKey = 'platform_pizza_flavors_v1';
-    const sanitized = sanitizeData({ ...item, tags: item.tags || [], ingredients: item.ingredients || [], active: item.active !== false, priceDeltaBySize: item.priceDeltaBySize || null });
+    const sanitized = sanitizeData({ ...item, tags: item.tags || [], ingredients: item.ingredients || [], active: item.active !== false, priceDeltaBySize: item.priceDeltaBySize || null, extraPrice: typeof item.extraPrice === 'number' ? item.extraPrice : null, flavorType: item.flavorType === 'Doce' ? 'Doce' : 'Salgado' });
 
     if (db) {
       try {
