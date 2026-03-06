@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Check, Plus, Trash2 } from 'lucide-react';
 import { MenuItem, PizzaFlavor, PizzaPricingStrategy, PizzaSizeOption } from '../types';
 import { dbMenu, dbPizzaFlavors } from '../services/dbService';
+import { uploadImageToCloudinary } from '../services/cloudinaryUpload';
 
 interface Props {
   pizzaBase?: MenuItem | null;
@@ -37,8 +38,12 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories, onSa
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
+  const [imagePublicId, setImagePublicId] = useState('');
   const [sizes, setSizes] = useState<PizzaSizeOption[]>([defaultSize()]);
   const [maxFlavorsAllowed, setMaxFlavorsAllowed] = useState(2);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
+  const [localImagePreview, setLocalImagePreview] = useState('');
 
   const [flavors, setFlavors] = useState<PizzaFlavor[]>([]);
   const [flavorNameInput, setFlavorNameInput] = useState('');
@@ -60,6 +65,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories, onSa
       category: pizzaBase?.category || categories[0] || 'Pizzas',
       description: pizzaBase?.description || '',
       imageUrl: pizzaBase?.imageUrl || '',
+      imagePublicId: pizzaBase?.imagePublicId || '',
       sizes: normalizedSizes,
       maxFlavorsAllowed: initialMaxFlavors,
       flavorNameInput: '',
@@ -70,6 +76,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories, onSa
     setCategory(snapshot.category);
     setDescription(snapshot.description);
     setImageUrl(snapshot.imageUrl);
+    setImagePublicId(snapshot.imagePublicId);
     setSizes(snapshot.sizes);
     setMaxFlavorsAllowed(snapshot.maxFlavorsAllowed);
     setFlavorNameInput('');
@@ -85,13 +92,34 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories, onSa
       category,
       description,
       imageUrl,
+      imagePublicId,
       sizes,
       maxFlavorsAllowed,
       flavorNameInput,
       editingFlavorId
     });
     onDirtyChange?.(snapshot !== initialSnapshot);
-  }, [name, category, description, imageUrl, sizes, maxFlavorsAllowed, flavorNameInput, editingFlavorId, initialSnapshot, onDirtyChange]);
+  }, [name, category, description, imageUrl, imagePublicId, sizes, maxFlavorsAllowed, flavorNameInput, editingFlavorId, initialSnapshot, onDirtyChange]);
+
+  const handleImageFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setLocalImagePreview(URL.createObjectURL(file));
+    setImageUploadError(null);
+    setIsUploadingImage(true);
+
+    try {
+      const uploaded = await uploadImageToCloudinary(file);
+      setImageUrl(uploaded.secureUrl);
+      setImagePublicId(uploaded.publicId);
+    } catch (error) {
+      setImageUploadError(error instanceof Error ? error.message : 'Falha ao fazer upload da imagem.');
+    } finally {
+      setIsUploadingImage(false);
+      event.target.value = '';
+    }
+  };
 
   const canSavePizza = sizes.length > 0 && sizes.every((size) => size.label.trim() && size.basePrice >= 0);
 
@@ -165,6 +193,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories, onSa
   };
 
   const handleSavePizza = async () => {
+    if (isUploadingImage) return;
     if (!name.trim() || !canSavePizza) return;
 
     setIsSaving(true);
@@ -177,6 +206,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories, onSa
         price: sizes[0]?.basePrice || 0,
         description,
         imageUrl: imageUrl || 'https://images.unsplash.com/photo-1513104890138-7c749659a591?q=80&w=800',
+        imagePublicId: imagePublicId || undefined,
         rating: 5,
         preparationTime: '30 min',
         size: 'M',
@@ -211,6 +241,12 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories, onSa
               {categories.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
             <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="Imagem (opcional) • URL da imagem" className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700" />
+            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+              <input type="file" accept="image/*" onChange={handleImageFileChange} className="text-xs" />
+              {isUploadingImage && <span className="text-[11px] text-orange-500 font-bold">Enviando imagem...</span>}
+            </div>
+            {imageUploadError && <p className="text-[11px] text-red-500">{imageUploadError}</p>}
+            {(localImagePreview || imageUrl) && <img src={localImagePreview || imageUrl} alt="Prévia" className="w-20 h-20 rounded-xl object-cover border border-stone-200" />}
           </div>
         </section>
 
@@ -258,7 +294,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories, onSa
       </div>
 
       <div className="px-6 lg:px-12 py-4 border-t border-stone-100 dark:border-stone-800 flex items-center justify-end bg-white dark:bg-stone-900">
-        <button onClick={handleSavePizza} disabled={isSaving || !canSavePizza} className="px-5 py-3 rounded-2xl bg-orange-500 text-white text-xs font-black uppercase disabled:opacity-50 flex items-center gap-2">
+        <button onClick={handleSavePizza} disabled={isSaving || !canSavePizza || isUploadingImage} className="px-5 py-3 rounded-2xl bg-orange-500 text-white text-xs font-black uppercase disabled:opacity-50 flex items-center gap-2">
           {isSaving ? 'Salvando...' : <>Salvar Pizza <Check size={14} /></>}
         </button>
       </div>

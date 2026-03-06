@@ -46,6 +46,7 @@ export interface MenuItem {
   originalPrice?: number;
   description: string;
   imageUrl: string;
+  imagePublicId?: string;
   rating: number;
   preparationTime: string;
   size: 'P' | 'M' | 'G';

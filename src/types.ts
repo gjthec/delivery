@@ -13,6 +13,7 @@ export interface MenuItem {
   rating: number;
   preparationTime: string;
   imageUrl: string;
+  imagePublicId?: string;
   description: string;
   size: 'P' | 'M' | 'G';
   tags: string[];
