@@ -31,11 +31,11 @@ const defaultSize = (): PizzaSizeOption => ({
 });
 
 const MAX_FLAVOR_OPTIONS = [1, 2, 3, 4] as const;
+const PIZZA_CATEGORY = 'Pizzas';
 
-const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories, onSaved, onDirtyChange }) => {
+const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _categories, onSaved, onDirtyChange }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [name, setName] = useState('');
-  const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [imagePublicId, setImagePublicId] = useState('');
@@ -63,7 +63,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories, onSa
 
     const snapshot = {
       name: pizzaBase?.name || 'Pizza da Casa',
-      category: pizzaBase?.category || categories[0] || 'Pizzas',
+      category: PIZZA_CATEGORY,
       description: pizzaBase?.description || '',
       imageUrl: pizzaBase?.imageUrl || '',
       imagePublicId: pizzaBase?.imagePublicId || '',
@@ -74,7 +74,6 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories, onSa
     };
 
     setName(snapshot.name);
-    setCategory(snapshot.category);
     setDescription(snapshot.description);
     setImageUrl(snapshot.imageUrl);
     setImagePublicId(snapshot.imagePublicId);
@@ -84,13 +83,13 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories, onSa
     setEditingFlavorId(null);
     setInitialSnapshot(JSON.stringify(snapshot));
     loadFlavors();
-  }, [pizzaBase, categories]);
+  }, [pizzaBase]);
 
   useEffect(() => {
     if (!initialSnapshot) return;
     const snapshot = JSON.stringify({
       name,
-      category,
+      category: PIZZA_CATEGORY,
       description,
       imageUrl,
       imagePublicId,
@@ -100,7 +99,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories, onSa
       editingFlavorId
     });
     onDirtyChange?.(snapshot !== initialSnapshot);
-  }, [name, category, description, imageUrl, imagePublicId, sizes, maxFlavorsAllowed, flavorNameInput, editingFlavorId, initialSnapshot, onDirtyChange]);
+  }, [name, description, imageUrl, imagePublicId, sizes, maxFlavorsAllowed, flavorNameInput, editingFlavorId, initialSnapshot, onDirtyChange]);
 
   const handleImageFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -211,7 +210,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories, onSa
         id: pizzaBase?.id || `pizza-${Date.now()}`,
         type: 'pizza',
         name,
-        category,
+        category: PIZZA_CATEGORY,
         price: sizes[0]?.basePrice || 0,
         description,
         imageUrl: resolvedImageUrl,
@@ -244,11 +243,8 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories, onSa
       <div className="flex-1 overflow-y-auto p-6 lg:px-12 space-y-6">
         <section className="space-y-3">
           <h3 className="text-sm font-black">Informações básicas</h3>
-          <div className="grid sm:grid-cols-3 gap-2">
+          <div className="grid sm:grid-cols-2 gap-2">
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome da pizza (Ex: Pizza da Casa)" className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700" />
-            <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700">
-              {categories.map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
             <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
               <label className="px-4 py-3 rounded-2xl bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 font-bold text-sm text-stone-600 dark:text-stone-300 cursor-pointer hover:border-orange-400 transition-all inline-flex items-center gap-2 w-fit">
                 Selecionar imagem
