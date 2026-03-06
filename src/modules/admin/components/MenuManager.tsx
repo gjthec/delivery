@@ -3,14 +3,13 @@ import { MenuItem, ExtraItem, Coupon, PizzaFlavor, PizzaSizeOption, Ingredient }
 import { improveMenuItem } from '../services/aiService'; // Adjusted path
 import { dbMenu, dbCatalog, dbCoupons, dbSettings, dbPizzaFlavors, dbIngredientsCatalog } from '../services/dbService'; // Adjusted path
 import { 
-  Plus, Edit2, Trash2, X, Sparkles, RefreshCw, 
+  Plus, Edit2, Trash2, X, Sparkles, RefreshCw,
   Image as ImageIcon, Tag, List, PlusCircle, MinusCircle, DollarSign,
   Check, ChevronDown, Settings, Save, Search, LayoutGrid, Filter, ArrowUpDown,
   TicketPercent, AlertTriangle, Bike
 } from 'lucide-react';
 import { INITIAL_CATEGORIES } from '../mockData';
 import PizzaConfiguratorContent from '../pizza/PizzaConfiguratorContent';
-import { FieldLabel } from './FieldHelp';
 import { uploadImageToCloudinary } from '../services/cloudinaryUpload';
 
 type SortOption = 'category' | 'price-asc' | 'price-desc' | 'name';
@@ -554,8 +553,8 @@ const MenuManager: React.FC = () => {
     setIsGeneratingDescription(true);
     try {
       const result = await improveMenuItem({ ...formData, id: editingId || 'temp', price: parseFloat(formData.price || '0'), rating: 5, preparationTime: '20min' } as any);
-      setFormData(prev => ({ 
-        ...prev, 
+      setFormData(prev => ({
+        ...prev,
         name: result.newName,
         description: result.descriptionLong,
         tags: Array.from(new Set([...prev.tags, ...result.tags]))
@@ -564,6 +563,8 @@ const MenuManager: React.FC = () => {
       setIsGeneratingDescription(false);
     }
   };
+
+
 
   // Helper functions for lists
   const addTag = (value: string = newTag) => { 
@@ -1109,7 +1110,7 @@ const MenuManager: React.FC = () => {
               <div className="flex justify-between items-center p-6 lg:px-12 lg:pt-12 lg:pb-6 border-b border-stone-100 dark:border-stone-800 bg-white dark:bg-stone-900 shrink-0 z-10">
                 <div>
                   <h2 className="text-xl lg:text-2xl font-black uppercase tracking-tight text-stone-800 dark:text-white">{editingId ? 'Ficha Técnica do Prato' : 'Novo Item'}</h2>
-                  <p className="text-sm text-stone-400 font-medium">{editingId ? 'Editando prato existente' : 'Escolha o tipo do item para começar.'}</p>
+                  <p className="text-sm text-stone-400 font-medium">{editingId ? 'Edite as informações do item.' : 'Preencha os dados para colocar no cardápio.'}</p>
                 </div>
                 <button onClick={() => { setIsModalOpen(false); resetForm(); }} className="p-2 lg:p-3 bg-stone-100 dark:bg-stone-800 rounded-2xl text-stone-400 hover:text-red-500 transition-all"><X size={20} className="lg:w-6 lg:h-6"/></button>
               </div>
@@ -1140,12 +1141,6 @@ const MenuManager: React.FC = () => {
                   </div>
                 )}
 
-                {newItemType === 'normal' && (
-                  <div className="rounded-2xl border border-stone-200 dark:border-stone-700 bg-stone-50/80 dark:bg-stone-800/40 p-3">
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500 mb-1">O que você está configurando</p>
-                    <p className="text-xs text-stone-600 dark:text-stone-300">Aqui você cadastra um item do cardápio (nome, categoria, tamanho e composição). Essas informações aparecem para o cliente e ajudam no pedido.</p>
-                  </div>
-                )}
 
                 {newItemType === 'pizza' ? (
                   <PizzaConfiguratorContent
@@ -1165,17 +1160,18 @@ const MenuManager: React.FC = () => {
                   <div className="space-y-8">
                     <div className="space-y-6">
                       <h3 className="text-[10px] font-black uppercase text-stone-400 tracking-[0.2em] flex items-center gap-2">
-                        <List size={14} className="text-orange-500" /> Informações Básicas
+                        <List size={14} className="text-orange-500" /> Informações principais
                       </h3>
+                      <p className="text-xs text-stone-400">Preencha o básico para cadastrar o item no cardápio.</p>
                       
                       <div className="space-y-2">
-                        <FieldLabel title="Nome do Prato" help="Nome do produto exibido para o cliente." helper="Nome que o cliente verá no cardápio (ex.: Burger Supremo)." className="ml-2 space-y-1" />
+                        <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Nome do item</label>
                         <input value={formData.name} onChange={e => setFormData(p => ({...p, name: e.target.value}))} className="w-full bg-stone-50 dark:bg-stone-800 p-4 rounded-2xl border border-stone-200 dark:border-stone-700 font-bold outline-none focus:border-orange-500 dark:text-white" placeholder="Ex: Burger Supremo" />
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className={`space-y-2 ${isAddingCategory ? 'sm:col-span-2' : ''}`}>
-                          <FieldLabel title="Categoria" help="Define em qual seção do cardápio o item aparece." helper="Seção do cardápio onde esse item vai aparecer (ex.: Bebidas, Lanches)." className="ml-2 space-y-1" />
+                          <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Categoria</label>
                           {isAddingCategory ? (
                               <div className="flex gap-2 h-[58px] animate-in fade-in slide-in-from-left-2 duration-200">
                                   <input 
@@ -1227,7 +1223,7 @@ const MenuManager: React.FC = () => {
                           )}
                         </div>
                         <div className="space-y-2">
-                          <FieldLabel title="Tamanho" help="Tamanho do item para apresentação e preço." helper="Tamanho do item (se aplicável). Isso pode impactar preço e apresentação." className="ml-2 space-y-1" />
+                          <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Tamanho</label>
                           <div className="flex bg-stone-50 dark:bg-stone-800 p-1.5 rounded-2xl border border-stone-200 dark:border-stone-700 h-[58px]">
                               {(['P', 'M', 'G'] as const).map(size => (
                                   <button
@@ -1243,7 +1239,7 @@ const MenuManager: React.FC = () => {
                       </div>
 
                       <div className="space-y-2">
-                        <FieldLabel title="Imagem" help="Selecione uma foto do seu computador." helper="A imagem será enviada automaticamente para o Cloudinary ao salvar." className="ml-2 space-y-1" />
+                        <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Imagem <span className="text-stone-400">(opcional)</span></label>
                         <div className="flex items-center gap-2">
                           <label className="px-4 py-3 rounded-2xl bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 font-bold text-sm text-stone-600 dark:text-stone-300 cursor-pointer hover:border-orange-400 transition-all inline-flex items-center gap-2">
                             <ImageIcon size={16} /> Selecionar imagem
@@ -1261,19 +1257,20 @@ const MenuManager: React.FC = () => {
 
                     <div className="space-y-6">
                       <h3 className="text-[10px] font-black uppercase text-stone-400 tracking-[0.2em] flex items-center gap-2">
-                        <DollarSign size={14} className="text-orange-500" /> Engenharia de Preços
+                        <DollarSign size={14} className="text-orange-500" /> Preço
                       </h3>
+                      <p className="text-xs text-stone-400">Defina os valores do item.</p>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="space-y-2">
-                          <FieldLabel title="Preço de venda" help="Valor cobrado do cliente." helper="Preço que o cliente pagará por este item." className="ml-2 space-y-1" />
+                          <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Preço de venda</label>
                           <input type="number" value={formData.price} onChange={e => setFormData(p => ({...p, price: e.target.value}))} className="w-full bg-stone-50 dark:bg-stone-800 p-4 rounded-2xl border border-stone-200 dark:border-stone-700 font-black text-orange-600" />
                         </div>
                         <div className="space-y-2">
-                          <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Custo Unitário</label>
-                          <input type="number" value={formData.costPrice} onChange={e => setFormData(p => ({...p, costPrice: e.target.value}))} className="w-full bg-stone-50 dark:bg-stone-800 p-4 rounded-2xl border border-stone-200 dark:border-stone-700 font-bold dark:text-white" />
+                          <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Custo unitário</label>
+                          <input type="number" value={formData.costPrice} onChange={e => setFormData(p => ({...p, costPrice: e.target.value}))} className="w-full bg-stone-50 dark:bg-stone-800 p-4 rounded-2xl border border-stone-200 dark:border-stone-700 font-bold dark:text-white" placeholder="R$ 0,00" />
                         </div>
                         <div className="space-y-2">
-                          <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Preço Original</label>
+                          <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Preço promocional ou de antes</label>
                           <input type="number" value={formData.originalPrice} onChange={e => setFormData(p => ({...p, originalPrice: e.target.value}))} className="w-full bg-stone-50 dark:bg-stone-800 p-4 rounded-2xl border border-stone-200 dark:border-stone-700 font-bold dark:text-white" />
                         </div>
                       </div>
@@ -1306,24 +1303,34 @@ const MenuManager: React.FC = () => {
                     )}
 
                     <div className="space-y-4">
-                      <label className="text-[10px] font-black uppercase text-stone-500 ml-2 flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between">
-                        Descrição Persuasiva
-                        <button onClick={handleAIOptimize} disabled={isGeneratingDescription} className="text-orange-500 flex items-center gap-1.5 hover:scale-105 active:scale-95 transition-all text-[9px] font-black bg-orange-50 px-3 py-1.5 rounded-full border border-orange-100">
-                          {isGeneratingDescription ? <RefreshCw className="animate-spin" size={12}/> : <Sparkles size={12}/>} OTIMIZAR COM IA
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Descrição</label>
+                        <button onClick={handleAIOptimize} disabled={isGeneratingDescription} className="px-3 py-1.5 rounded-xl border border-orange-200 bg-orange-50 text-orange-600 text-[10px] font-black uppercase flex items-center gap-1.5 w-fit disabled:opacity-60">
+                          {isGeneratingDescription ? <RefreshCw className="animate-spin" size={12}/> : <Sparkles size={12}/>} Gerar com IA
                         </button>
-                      </label>
-                      <textarea rows={6} value={formData.description} onChange={e => setFormData(p => ({...p, description: e.target.value}))} className="w-full bg-stone-50 dark:bg-stone-800 p-6 rounded-3xl border border-stone-200 dark:border-stone-700 font-medium text-sm leading-relaxed outline-none focus:border-orange-500 dark:text-white" placeholder="Descreva o sabor, a textura e os segredos deste prato..." />
+                      </div>
+                      <p className="text-xs text-stone-400">Explique o item de forma simples ou gere um texto com IA.</p>
+                      <textarea rows={5} value={formData.description} onChange={e => setFormData(p => ({...p, description: e.target.value}))} className="w-full bg-stone-50 dark:bg-stone-800 p-4 rounded-2xl border border-stone-200 dark:border-stone-700 font-medium text-sm leading-relaxed outline-none focus:border-orange-500 dark:text-white" placeholder="Descreva o sabor, os ingredientes ou os diferenciais do item" />
                     </div>
                   </div>
 
-                  {/* Coluna 2: Listas (Ingredientes, Tags, Extras) */}
-                  <div className="space-y-8 bg-stone-50/50 dark:bg-stone-800/30 p-6 lg:p-8 rounded-[2rem] lg:rounded-[2.5rem] border border-stone-100 dark:border-stone-800">
+                  {/* Coluna 2: Detalhes opcionais */}
+                  <details className="group space-y-6 bg-stone-50/50 dark:bg-stone-800/30 p-6 lg:p-8 rounded-[2rem] lg:rounded-[2.5rem] border border-stone-100 dark:border-stone-800">
+                    <summary className="list-none cursor-pointer flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-500">Detalhes opcionais</p>
+                        <p className="text-xs text-stone-400">Preencha apenas se quiser adicionar mais informações.</p>
+                      </div>
+                      <span className="text-[10px] font-black uppercase text-stone-400 group-open:hidden">Mostrar</span>
+                      <span className="text-[10px] font-black uppercase text-stone-400 hidden group-open:inline">Ocultar</span>
+                    </summary>
+                    <div className="space-y-8 pt-2">
                     {/* Tags */}
                     <div className="space-y-4">
                       <h3 className="text-[10px] font-black uppercase text-stone-400 tracking-[0.2em] flex items-center gap-2">
-                        <Tag size={14} className="text-orange-500" /> Selos e Tags
+                        <Tag size={14} className="text-orange-500" /> Tags
                       </h3>
-                      <p className="text-[11px] text-stone-400">Selos para destacar o item (ex.: Mais vendido, Promoção).</p>
+                      
                       <div className="flex flex-col sm:flex-row gap-2">
                         <input 
                            list="global-tags-list"
@@ -1366,9 +1373,9 @@ const MenuManager: React.FC = () => {
                     {/* Ingredientes */}
                     <div className="space-y-4">
                       <h3 className="text-[10px] font-black uppercase text-stone-400 tracking-[0.2em] flex items-center gap-2">
-                        <List size={14} className="text-orange-500" /> Composição (Ingredientes)
+                        <List size={14} className="text-orange-500" /> Ingredientes
                       </h3>
-                      <p className="text-[11px] text-stone-400">Lista de ingredientes/composição (aparece para o cliente).</p>
+                      
                       <div className="flex flex-col sm:flex-row gap-2">
                         <input 
                             list="global-ingredients-list"
@@ -1411,7 +1418,7 @@ const MenuManager: React.FC = () => {
                     {/* Adicionais */}
                     <div className="space-y-4">
                       <h3 className="text-[10px] font-black uppercase text-stone-400 tracking-[0.2em] flex items-center gap-2">
-                        <PlusCircle size={14} className="text-orange-500" /> Opcionais e Adicionais
+                        <PlusCircle size={14} className="text-orange-500" /> Complementos opcionais
                       </h3>
                       <div className="flex flex-col sm:flex-row gap-2">
                         <input value={newExtra.name} onChange={e => setNewExtra(p => ({...p, name: e.target.value}))} className="flex-[2] min-w-0 bg-white dark:bg-stone-900 px-4 py-2 rounded-xl border border-stone-200 dark:border-stone-700 text-sm font-bold dark:text-white" placeholder="Item" />
@@ -1430,7 +1437,8 @@ const MenuManager: React.FC = () => {
                         ))}
                       </div>
                     </div>
-                  </div>
+                    </div>
+                  </details>
                 </div>
                 )}
               </div>
