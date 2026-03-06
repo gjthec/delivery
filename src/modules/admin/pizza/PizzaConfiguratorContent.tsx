@@ -325,24 +325,45 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
         </section>
 
         <section className="space-y-3">
-          <h3 className="text-sm font-black">Tamanhos e preço</h3>
+          <h3 className="text-sm font-black">Tamanhos da pizza</h3>
           {sizes.map((size, index) => (
-            <div key={`${size.id}-${index}`} className="grid grid-cols-1 sm:grid-cols-[1fr_130px_160px_170px_auto] gap-2 items-center">
-              <input value={size.label} onChange={(e) => updateSize(index, 'label', e.target.value)} placeholder="Pizza Pequena / Pizza Média / Pizza Grande" className="bg-stone-50 dark:bg-stone-800 p-3 rounded-xl border border-stone-200" />
-              <input type="number" min={0} step="0.01" value={size.basePrice} onChange={(e) => updateSize(index, 'basePrice', e.target.value)} placeholder="Preço" className="bg-stone-50 dark:bg-stone-800 p-3 rounded-xl border border-stone-200" />
-              <input type="number" min={1} value={size.slices ?? ''} onChange={(e) => updateSize(index, 'slices', e.target.value)} placeholder="Fatias" className="bg-stone-50 dark:bg-stone-800 p-3 rounded-xl border border-stone-200" />
-              <select value={size.maxFlavors} onChange={(e) => updateSize(index, 'maxFlavors', e.target.value)} className="bg-stone-50 dark:bg-stone-800 p-3 rounded-xl border border-stone-200 text-sm font-bold">
-                {MAX_FLAVOR_OPTIONS.map((option) => (
-                  <option key={option} value={option}>{option} {option === 1 ? 'sabor' : 'sabores'}</option>
-                ))}
-              </select>
-              <button onClick={() => removeSize(index)} className="p-3 rounded-xl border border-red-200 text-red-500 flex items-center justify-center" title="Remover pizza">
-                <Trash2 size={14} />
-              </button>
+            <div key={`${size.id}-${index}`} className="rounded-2xl border border-stone-200 dark:border-stone-700 p-4 space-y-4 bg-white dark:bg-stone-900">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-black uppercase tracking-[0.15em] text-stone-400">Tamanho {index + 1}</p>
+                <button onClick={() => removeSize(index)} className="p-2 rounded-lg border border-red-200 text-red-500 flex items-center justify-center" title="Remover tamanho">
+                  <Trash2 size={14} />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase text-stone-500">Nome do tamanho</label>
+                  <input value={size.label} onChange={(e) => updateSize(index, 'label', e.target.value)} placeholder="Ex: Pequena, Média, Grande, Gigante" className="w-full bg-stone-50 dark:bg-stone-800 p-3 rounded-xl border border-stone-200 dark:border-stone-700" />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase text-stone-500">Preço</label>
+                  <input type="number" min={0} step="0.01" value={size.basePrice} onChange={(e) => updateSize(index, 'basePrice', e.target.value)} placeholder="R$ 0,00" className="w-full bg-stone-50 dark:bg-stone-800 p-3 rounded-xl border border-stone-200 dark:border-stone-700" />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase text-stone-500">Quantidade de fatias</label>
+                  <input type="number" min={1} value={size.slices ?? ''} onChange={(e) => updateSize(index, 'slices', e.target.value)} placeholder="Ex: 4, 6, 8" className="w-full bg-stone-50 dark:bg-stone-800 p-3 rounded-xl border border-stone-200 dark:border-stone-700" />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase text-stone-500">Máximo de sabores</label>
+                  <select value={size.maxFlavors} onChange={(e) => updateSize(index, 'maxFlavors', e.target.value)} className="w-full bg-stone-50 dark:bg-stone-800 p-3 rounded-xl border border-stone-200 dark:border-stone-700 text-sm font-bold">
+                    {MAX_FLAVOR_OPTIONS.map((option) => (
+                      <option key={option} value={option}>{option} {option === 1 ? 'sabor' : 'sabores'}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
           ))}
           <button onClick={addSize} className="px-4 py-2 rounded-xl bg-orange-500 text-white text-xs font-black uppercase flex items-center gap-2">
-            <Plus size={14} /> Adicionar pizza do cardápio
+            <Plus size={14} /> Adicionar tamanho de pizza
           </button>
         </section>
 
