@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Check, Plus, Trash2 } from 'lucide-react';
-import { MenuItem, PizzaFlavor, PizzaPricingStrategy, PizzaSizeOption } from '../types';
-import { dbMenu, dbPizzaFlavors } from '../services/dbService';
+import { MenuItem, PizzaPricingStrategy, PizzaSizeOption } from '../types';
+import { dbMenu } from '../services/dbService';
 import { uploadImageToCloudinary } from '../services/cloudinaryUpload';
 
 interface Props {
@@ -40,26 +40,19 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
   const [imageUrl, setImageUrl] = useState('');
   const [imagePublicId, setImagePublicId] = useState('');
   const [sizes, setSizes] = useState<PizzaSizeOption[]>([defaultSize()]);
-  const [maxFlavorsAllowed, setMaxFlavorsAllowed] = useState(2);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [imageUploadError, setImageUploadError] = useState<string | null>(null);
   const [localImagePreview, setLocalImagePreview] = useState('');
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
 
-  const [flavors, setFlavors] = useState<PizzaFlavor[]>([]);
-  const [flavorNameInput, setFlavorNameInput] = useState('');
-  const [editingFlavorId, setEditingFlavorId] = useState<string | null>(null);
+
   const [initialSnapshot, setInitialSnapshot] = useState('');
 
-  const loadFlavors = async () => {
-    const data = await dbPizzaFlavors.getAll();
-    setFlavors(data);
-  };
 
   useEffect(() => {
     const existingSizes = pizzaBase?.sizes?.length ? pizzaBase.sizes : [defaultSize()];
     const initialMaxFlavors = Math.max(1, Math.min(4, existingSizes[0]?.maxFlavors || 2));
-    const normalizedSizes = existingSizes.map((size) => ({ ...size, maxFlavors: initialMaxFlavors }));
+    const normalizedSizes = existingSizes.map((size) => ({ ...size, maxFlavors: Math.max(1, Math.min(4, size.maxFlavors || initialMaxFlavors)), slices: size.slices ?? null }));
 
     const snapshot = {
       name: pizzaBase?.name || 'Pizza da Casa',
@@ -68,9 +61,6 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
       imageUrl: pizzaBase?.imageUrl || '',
       imagePublicId: pizzaBase?.imagePublicId || '',
       sizes: normalizedSizes,
-      maxFlavorsAllowed: initialMaxFlavors,
-      flavorNameInput: '',
-      editingFlavorId: null
     };
 
     setName(snapshot.name);
@@ -78,11 +68,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
     setImageUrl(snapshot.imageUrl);
     setImagePublicId(snapshot.imagePublicId);
     setSizes(snapshot.sizes);
-    setMaxFlavorsAllowed(snapshot.maxFlavorsAllowed);
-    setFlavorNameInput('');
-    setEditingFlavorId(null);
     setInitialSnapshot(JSON.stringify(snapshot));
-    loadFlavors();
   }, [pizzaBase]);
 
   useEffect(() => {
@@ -93,13 +79,10 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
       description,
       imageUrl,
       imagePublicId,
-      sizes,
-      maxFlavorsAllowed,
-      flavorNameInput,
-      editingFlavorId
+      sizes
     });
     onDirtyChange?.(snapshot !== initialSnapshot);
-  }, [name, description, imageUrl, imagePublicId, sizes, maxFlavorsAllowed, flavorNameInput, editingFlavorId, initialSnapshot, onDirtyChange]);
+  }, [name, description, imageUrl, imagePublicId, sizes, initialSnapshot, onDirtyChange]);
 
   const handleImageFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -114,14 +97,16 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
   const canSavePizza = sizes.length > 0 && sizes.every((size) => size.label.trim() && size.basePrice >= 0);
 
   const addSize = () => {
-    setSizes((prev) => [...prev, { ...defaultSize(), maxFlavors: maxFlavorsAllowed }]);
+    setSizes((prev) => [...prev, defaultSize()]);
   };
 
-  const updateSize = (index: number, field: 'label' | 'basePrice', value: string) => {
+  const updateSize = (index: number, field: 'label' | 'basePrice' | 'slices' | 'maxFlavors', value: string) => {
     setSizes((prev) => prev.map((size, i) => {
       if (i !== index) return size;
-      if (field === 'basePrice') return { ...size, basePrice: Number(value) || 0, maxFlavors: maxFlavorsAllowed };
-      return { ...size, label: value, maxFlavors: maxFlavorsAllowed };
+      if (field === 'basePrice') return { ...size, basePrice: Math.max(0, Number(value) || 0) };
+      if (field === 'maxFlavors') return { ...size, maxFlavors: Math.max(1, Math.min(4, Number(value) || 1)) };
+      if (field === 'slices') return { ...size, slices: value ? Math.max(1, Number(value) || 1) : null };
+      return { ...size, label: value };
     }));
   };
 
@@ -129,58 +114,6 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
     setSizes((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleMaxFlavorsChange = (value: number) => {
-    setMaxFlavorsAllowed(value);
-    setSizes((prev) => prev.map((size) => ({ ...size, maxFlavors: value })));
-  };
-
-  const saveFlavor = async () => {
-    const normalizedName = flavorNameInput.trim();
-    if (!normalizedName) return;
-
-    if (editingFlavorId) {
-      const current = flavors.find((flavor) => flavor.id === editingFlavorId);
-      if (!current) return;
-
-      await dbPizzaFlavors.save(removeUndefinedDeep({
-        ...current,
-        name: normalizedName,
-        active: current.active !== false,
-        tags: current.tags || [],
-        ingredients: current.ingredients || [],
-        priceDeltaBySize: current.priceDeltaBySize || null
-      }));
-    } else {
-      await dbPizzaFlavors.save(removeUndefinedDeep({
-        id: `flavor-${Date.now()}`,
-        name: normalizedName,
-        description: null,
-        imageUrl: null,
-        active: true,
-        tags: [],
-        ingredients: [],
-        priceDeltaBySize: null
-      }));
-    }
-
-    await loadFlavors();
-    setFlavorNameInput('');
-    setEditingFlavorId(null);
-  };
-
-  const editFlavor = (flavor: PizzaFlavor) => {
-    setEditingFlavorId(flavor.id);
-    setFlavorNameInput(flavor.name);
-  };
-
-  const removeFlavor = async (flavorId: string) => {
-    await dbPizzaFlavors.delete(flavorId);
-    await loadFlavors();
-    if (editingFlavorId === flavorId) {
-      setFlavorNameInput('');
-      setEditingFlavorId(null);
-    }
-  };
 
   const handleSavePizza = async () => {
     if (isUploadingImage) return;
@@ -221,13 +154,13 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
         tags: ['pizza'],
         ingredients: [],
         extras: [],
-        pricingStrategy: 'highestFlavor' as PizzaPricingStrategy,
+        pricingStrategy: 'fixedBySize' as PizzaPricingStrategy,
         sizes: sizes.map((size) => ({
           id: size.id || `size-${Date.now()}`,
           label: size.label || 'Tamanho',
           basePrice: Number(size.basePrice || 0),
-          maxFlavors: maxFlavorsAllowed,
-          slices: null
+          maxFlavors: Math.max(1, Math.min(4, Number(size.maxFlavors || 1))),
+          slices: size.slices ?? null
         }))
       });
 
@@ -259,45 +192,25 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
         </section>
 
         <section className="space-y-3">
-          <h3 className="text-sm font-black">Tamanhos</h3>
+          <h3 className="text-sm font-black">Tamanhos e preço</h3>
           {sizes.map((size, index) => (
-            <div key={`${size.id}-${index}`} className="grid grid-cols-1 sm:grid-cols-[1fr_180px_auto] gap-2 items-center">
-              <input value={size.label} onChange={(e) => updateSize(index, 'label', e.target.value)} placeholder="Pequena / Média / Grande" className="bg-stone-50 dark:bg-stone-800 p-3 rounded-xl border border-stone-200" />
-              <input type="number" min={0} value={size.basePrice} onChange={(e) => updateSize(index, 'basePrice', e.target.value)} placeholder="Preço" className="bg-stone-50 dark:bg-stone-800 p-3 rounded-xl border border-stone-200" />
-              <button onClick={() => removeSize(index)} className="p-3 rounded-xl border border-red-200 text-red-500 flex items-center justify-center" title="Remover tamanho">
+            <div key={`${size.id}-${index}`} className="grid grid-cols-1 sm:grid-cols-[1fr_130px_160px_170px_auto] gap-2 items-center">
+              <input value={size.label} onChange={(e) => updateSize(index, 'label', e.target.value)} placeholder="Pizza Pequena / Pizza Média / Pizza Grande" className="bg-stone-50 dark:bg-stone-800 p-3 rounded-xl border border-stone-200" />
+              <input type="number" min={0} step="0.01" value={size.basePrice} onChange={(e) => updateSize(index, 'basePrice', e.target.value)} placeholder="Preço" className="bg-stone-50 dark:bg-stone-800 p-3 rounded-xl border border-stone-200" />
+              <input type="number" min={1} value={size.slices ?? ''} onChange={(e) => updateSize(index, 'slices', e.target.value)} placeholder="Fatias" className="bg-stone-50 dark:bg-stone-800 p-3 rounded-xl border border-stone-200" />
+              <select value={size.maxFlavors} onChange={(e) => updateSize(index, 'maxFlavors', e.target.value)} className="bg-stone-50 dark:bg-stone-800 p-3 rounded-xl border border-stone-200 text-sm font-bold">
+                {MAX_FLAVOR_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{option} {option === 1 ? 'sabor' : 'sabores'}</option>
+                ))}
+              </select>
+              <button onClick={() => removeSize(index)} className="p-3 rounded-xl border border-red-200 text-red-500 flex items-center justify-center" title="Remover pizza">
                 <Trash2 size={14} />
               </button>
             </div>
           ))}
           <button onClick={addSize} className="px-4 py-2 rounded-xl bg-orange-500 text-white text-xs font-black uppercase flex items-center gap-2">
-            <Plus size={14} /> Adicionar tamanho
+            <Plus size={14} /> Adicionar pizza do cardápio
           </button>
-        </section>
-
-        <section className="space-y-3">
-          <h3 className="text-sm font-black">Sabores</h3>
-          <select value={maxFlavorsAllowed} onChange={(e) => handleMaxFlavorsChange(Number(e.target.value))} className="w-full sm:w-72 bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700 text-sm font-bold">
-            {MAX_FLAVOR_OPTIONS.map((option) => (
-              <option key={option} value={option}>{option} {option === 1 ? 'sabor' : 'sabores'} (máximo por pizza)</option>
-            ))}
-          </select>
-
-          <div className="flex gap-2">
-            <input value={flavorNameInput} onChange={(e) => setFlavorNameInput(e.target.value)} placeholder="Ex: Calabresa, Frango com Catupiry, Portuguesa" className="flex-1 bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200" />
-            <button onClick={saveFlavor} className="px-4 py-3 rounded-2xl bg-orange-500 text-white text-xs font-black uppercase">{editingFlavorId ? 'Salvar' : 'Adicionar'}</button>
-          </div>
-
-          <div className="space-y-2 max-h-52 overflow-y-auto">
-            {flavors.map((flavor) => (
-              <div key={flavor.id} className="p-3 rounded-xl border border-stone-200 flex items-center justify-between gap-2">
-                <p className="font-black text-xs">{flavor.name}</p>
-                <div className="flex gap-2">
-                  <button onClick={() => editFlavor(flavor)} className="px-2 py-1 rounded-lg bg-stone-100 text-[10px] font-black uppercase">Editar</button>
-                  <button onClick={() => removeFlavor(flavor.id)} className="px-2 py-1 rounded-lg bg-red-50 text-red-600 text-[10px] font-black uppercase">Remover</button>
-                </div>
-              </div>
-            ))}
-          </div>
         </section>
       </div>
 
