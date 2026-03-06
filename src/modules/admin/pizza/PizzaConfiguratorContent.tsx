@@ -36,6 +36,7 @@ const PIZZA_CATEGORY = 'Pizzas';
 interface QuickFlavorDraft {
   name: string;
   flavorType: 'Salgado' | 'Doce';
+  imageUrl: string;
   extraPrice: string;
   active: boolean;
   ingredients: string[];
@@ -44,6 +45,7 @@ interface QuickFlavorDraft {
 const EMPTY_QUICK_FLAVOR_DRAFT: QuickFlavorDraft = {
   name: '',
   flavorType: 'Salgado',
+  imageUrl: '',
   extraPrice: '',
   active: true,
   ingredients: ['']
@@ -70,6 +72,10 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
   const [quickFlavorDraft, setQuickFlavorDraft] = useState<QuickFlavorDraft>(EMPTY_QUICK_FLAVOR_DRAFT);
   const [quickFlavorMessage, setQuickFlavorMessage] = useState<string | null>(null);
   const [quickFlavorError, setQuickFlavorError] = useState<string | null>(null);
+  const [quickFlavorImageFile, setQuickFlavorImageFile] = useState<File | null>(null);
+  const [quickFlavorImagePreview, setQuickFlavorImagePreview] = useState('');
+  const [quickFlavorImageUploadError, setQuickFlavorImageUploadError] = useState<string | null>(null);
+  const [isUploadingQuickFlavorImage, setIsUploadingQuickFlavorImage] = useState(false);
   const [initialSnapshot, setInitialSnapshot] = useState('');
 
   const loadFlavors = async () => {
@@ -124,6 +130,23 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
     setImageUploadError(null);
     setSelectedImageFile(file);
     event.target.value = '';
+  };
+
+  const handleQuickFlavorImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setQuickFlavorImagePreview(URL.createObjectURL(file));
+    setQuickFlavorImageUploadError(null);
+    setQuickFlavorImageFile(file);
+    event.target.value = '';
+  };
+
+  const resetQuickFlavorForm = () => {
+    setQuickFlavorDraft(EMPTY_QUICK_FLAVOR_DRAFT);
+    setQuickFlavorImageFile(null);
+    setQuickFlavorImagePreview('');
+    setQuickFlavorImageUploadError(null);
   };
 
   const canSavePizza = sizes.length > 0 && sizes.every((size) => size.label.trim() && size.basePrice >= 0);
@@ -226,11 +249,27 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
     setQuickFlavorMessage(null);
 
     try {
+      let resolvedFlavorImageUrl = quickFlavorDraft.imageUrl || '';
+      if (quickFlavorImageFile) {
+        setIsUploadingQuickFlavorImage(true);
+        setQuickFlavorImageUploadError(null);
+        try {
+          const uploaded = await uploadImageToCloudinary(quickFlavorImageFile);
+          resolvedFlavorImageUrl = uploaded.secureUrl;
+        } catch (error) {
+          setQuickFlavorImageUploadError(error instanceof Error ? error.message : 'Não foi possível enviar a imagem do sabor.');
+          return;
+        } finally {
+          setIsUploadingQuickFlavorImage(false);
+        }
+      }
+
       const flavorId = `pizza-flavor-${Date.now()}`;
       await dbPizzaFlavors.save({
         id: flavorId,
         name: normalizedName,
         flavorType: quickFlavorDraft.flavorType,
+        imageUrl: resolvedFlavorImageUrl || undefined,
         extraPrice: normalizedExtraPrice,
         active: quickFlavorDraft.active,
         tags: [],
@@ -241,7 +280,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
       const updatedFlavors = await dbPizzaFlavors.getAll();
       setPizzaFlavors(updatedFlavors);
       setSelectedFlavorIds((prev) => (prev.includes(flavorId) ? prev : [...prev, flavorId]));
-      setQuickFlavorDraft(EMPTY_QUICK_FLAVOR_DRAFT);
+      resetQuickFlavorForm();
       setQuickFlavorMessage('Sabor criado com sucesso e vinculado à pizza.');
       setIsQuickCreateOpen(false);
     } catch (error) {
@@ -382,6 +421,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
               setIsQuickCreateOpen((prev) => !prev);
               setQuickFlavorError(null);
               setQuickFlavorMessage(null);
+              setQuickFlavorImageUploadError(null);
             }} className="px-3 py-2 rounded-xl border border-orange-200 text-orange-600 text-xs font-black uppercase inline-flex items-center gap-1 hover:bg-orange-50 dark:hover:bg-orange-500/10">
               <Plus size={12} /> {isQuickCreateOpen ? 'Fechar' : 'Novo sabor'}
             </button>
@@ -411,6 +451,17 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
                   <option value="Doce">Doce</option>
                 </select>
 
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase text-stone-500">Imagem do sabor</label>
+                  <label className="w-full bg-white dark:bg-stone-900 py-2.5 px-3 rounded-xl border border-stone-200 dark:border-stone-700 text-sm cursor-pointer inline-flex items-center justify-between">
+                    <span className="truncate">{quickFlavorImageFile?.name || 'Selecionar imagem (opcional)'}</span>
+                    <input type="file" accept="image/*" onChange={handleQuickFlavorImageChange} className="hidden" />
+                  </label>
+                  {(quickFlavorImagePreview || quickFlavorDraft.imageUrl) && (
+                    <img src={quickFlavorImagePreview || quickFlavorDraft.imageUrl} alt="Prévia do sabor" className="w-16 h-16 rounded-xl object-cover border border-stone-200" />
+                  )}
+                </div>
+
                 <input type="number" min={0} step="0.01" value={quickFlavorDraft.extraPrice} onChange={(e) => setQuickFlavorDraft((prev) => ({ ...prev, extraPrice: e.target.value }))} placeholder="Preço extra (opcional)" className="w-full bg-white dark:bg-stone-900 py-2.5 px-3 rounded-xl border border-stone-200 dark:border-stone-700 text-sm" />
 
                 <label className="rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-2.5 inline-flex items-center justify-between text-sm text-stone-600 dark:text-stone-300">
@@ -433,17 +484,19 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
                 <button onClick={handleAddIngredientField} className="text-xs font-black text-orange-600 hover:text-orange-500">+ Adicionar ingrediente</button>
               </div>
 
+              {isUploadingQuickFlavorImage && <p className="text-xs text-orange-500">Enviando imagem do sabor...</p>}
+              {quickFlavorImageUploadError && <p className="text-xs text-red-500">{quickFlavorImageUploadError}</p>}
               {quickFlavorError && <p className="text-xs text-red-500">{quickFlavorError}</p>}
               {quickFlavorMessage && <p className="text-xs text-green-600">{quickFlavorMessage}</p>}
 
               <div className="flex items-center justify-end gap-2">
                 <button onClick={() => {
                   setIsQuickCreateOpen(false);
-                  setQuickFlavorDraft(EMPTY_QUICK_FLAVOR_DRAFT);
+                  resetQuickFlavorForm();
                   setQuickFlavorError(null);
                   setQuickFlavorMessage(null);
                 }} className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-black uppercase text-stone-500">Cancelar</button>
-                <button onClick={handleSaveQuickFlavor} disabled={isSavingQuickFlavor} className="px-3 py-2 rounded-xl bg-orange-500 text-white text-xs font-black uppercase disabled:opacity-50">{isSavingQuickFlavor ? 'Salvando...' : 'Salvar sabor'}</button>
+                <button onClick={handleSaveQuickFlavor} disabled={isSavingQuickFlavor || isUploadingQuickFlavorImage} className="px-3 py-2 rounded-xl bg-orange-500 text-white text-xs font-black uppercase disabled:opacity-50">{isSavingQuickFlavor || isUploadingQuickFlavorImage ? 'Salvando...' : 'Salvar sabor'}</button>
               </div>
             </div>
           )}
@@ -463,7 +516,14 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
                 return (
                   <button key={flavor.id} onClick={() => toggleFlavorSelection(flavor.id)} className={`rounded-2xl border p-3 text-left transition-all ${isSelected ? 'border-orange-500 bg-orange-50 dark:bg-orange-500/10' : 'border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900'}`}>
                     <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0">
+                      <div className="w-11 h-11 rounded-xl overflow-hidden border border-stone-200 dark:border-stone-700 bg-stone-100 dark:bg-stone-800 shrink-0">
+                        {flavor.imageUrl ? (
+                          <img src={flavor.imageUrl} alt={flavor.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-[9px] font-black uppercase text-stone-400">Sem foto</div>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
                         <p className="text-xs font-black text-stone-800 dark:text-stone-100 truncate">{flavor.name}</p>
                         <p className="text-[11px] text-stone-500">{typeLabel} {typeof flavor.extraPrice === 'number' ? `• +R$ ${flavor.extraPrice.toFixed(2)}` : ''}</p>
                         <p className="text-[11px] text-stone-400 truncate">{ingredientPreview || 'Sem ingredientes cadastrados'}</p>
