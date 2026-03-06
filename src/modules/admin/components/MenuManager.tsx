@@ -1,18 +1,38 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MenuItem, ExtraItem, Coupon, PizzaSizeOption } from '../types';
+import { MenuItem, ExtraItem, Coupon, PizzaFlavor, PizzaSizeOption } from '../types';
 import { improveMenuItem } from '../services/aiService'; // Adjusted path
-import { dbMenu, dbCatalog, dbCoupons, dbSettings } from '../services/dbService'; // Adjusted path
+import { dbMenu, dbCatalog, dbCoupons, dbPizzaFlavors, dbSettings } from '../services/dbService'; // Adjusted path
 import { 
   Plus, Edit2, Trash2, X, Sparkles, RefreshCw,
   Image as ImageIcon, Tag, List, PlusCircle, MinusCircle, DollarSign,
   Check, ChevronDown, Settings, Save, Search, LayoutGrid, Filter, ArrowUpDown,
-  TicketPercent, AlertTriangle, Bike
+  TicketPercent, AlertTriangle, Bike, Pizza
 } from 'lucide-react';
 import { INITIAL_CATEGORIES } from '../mockData';
 import PizzaConfiguratorContent from '../pizza/PizzaConfiguratorContent';
 import { uploadImageToCloudinary } from '../services/cloudinaryUpload';
 
 type SortOption = 'category' | 'price-asc' | 'price-desc' | 'name';
+
+type GlobalEntityType = 'category' | 'tag' | 'ingredient' | 'pizzaFlavor';
+
+type FlavorTypeFilter = 'Todos' | 'Salgado' | 'Doce';
+
+type FlavorDraft = {
+  id?: string;
+  name: string;
+  flavorType: 'Salgado' | 'Doce';
+  extraPrice: string;
+  active: boolean;
+};
+
+const EMPTY_FLAVOR_DRAFT: FlavorDraft = {
+  name: '',
+  flavorType: 'Salgado',
+  extraPrice: '',
+  active: true
+};
+
 
 const MenuManager: React.FC = () => {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -21,6 +41,9 @@ const MenuManager: React.FC = () => {
   // New Global State for lists (to allow managing unused items)
   const [globalTags, setGlobalTags] = useState<string[]>([]);
   const [globalIngredients, setGlobalIngredients] = useState<string[]>([]);
+  const [globalPizzaFlavors, setGlobalPizzaFlavors] = useState<PizzaFlavor[]>([]);
+  const [pizzaFlavorQuery, setPizzaFlavorQuery] = useState('');
+  const [pizzaFlavorTypeFilter, setPizzaFlavorTypeFilter] = useState<FlavorTypeFilter>('Todos');
 
   // Coupons State
   const [coupons, setCoupons] = useState<Coupon[]>([]);
@@ -49,6 +72,7 @@ const MenuManager: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [editingGlobal, setEditingGlobal] = useState<{ type: 'category' | 'tag' | 'ingredient', original: string, current: string } | null>(null);
   const [settingsInput, setSettingsInput] = useState({ category: '', tag: '', ingredient: '' });
+  const [flavorDraft, setFlavorDraft] = useState<FlavorDraft>(EMPTY_FLAVOR_DRAFT);
 
   // State para nova categoria (modal de item)
   const [isAddingCategory, setIsAddingCategory] = useState(false);
@@ -128,6 +152,7 @@ const MenuManager: React.FC = () => {
       const menuData = await loadMenu();
       await Promise.all([
         loadCatalogs(menuData),
+        loadPizzaFlavors(),
         loadCoupons(),
         loadSettings(),
       ]);
@@ -153,6 +178,12 @@ const MenuManager: React.FC = () => {
     const data = await dbMenu.getAll();
     setMenuItems(data);
     return data;
+  };
+
+
+  const loadPizzaFlavors = async () => {
+    const data = await dbPizzaFlavors.getAll();
+    setGlobalPizzaFlavors(data.sort((a, b) => a.name.localeCompare(b.name)));
   };
 
   const loadCatalogs = async (menuData: MenuItem[]) => {
@@ -574,10 +605,13 @@ const MenuManager: React.FC = () => {
 
   // --- GERENCIAMENTO GLOBAL ---
 
-  const getUsageCount = (type: 'category' | 'tag' | 'ingredient', value: string) => {
-    if (type === 'category') return menuItems.filter(i => i.category === value).length;
-    if (type === 'tag') return menuItems.filter(i => i.tags.includes(value)).length;
-    return menuItems.filter(i => i.ingredients.includes(value)).length;
+  const getUsageCount = (type: GlobalEntityType, value: string) => {
+    if (type === 'category') return menuItems.filter((i) => i.category === value).length;
+    if (type === 'tag') return menuItems.filter((i) => i.tags.includes(value)).length;
+    if (type === 'ingredient') return menuItems.filter((i) => i.ingredients.includes(value)).length;
+    const flavor = globalPizzaFlavors.find((item) => item.name === value);
+    if (!flavor) return 0;
+    return menuItems.filter((i) => i.type === 'pizza' && (i.allowedFlavorIds || []).includes(flavor.id)).length;
   };
 
   const startEditingGlobal = (type: 'category' | 'tag' | 'ingredient', value: string) => {
@@ -677,6 +711,182 @@ const MenuManager: React.FC = () => {
         setMenuItems(updatedItems);
     }
   };
+
+
+  const normalizeExtraPrice = (value: string): number | null => {
+    if (!value.trim()) return null;
+    const parsed = Number(value.replace(',', '.'));
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const handleSavePizzaFlavor = async () => {
+    const normalizedName = flavorDraft.name.trim();
+    if (!normalizedName) {
+      openAlert('Informe o nome do sabor.');
+      return;
+    }
+
+    const hasDuplicatedName = globalPizzaFlavors.some((flavor) => (
+      flavor.id !== flavorDraft.id && flavor.name.toLowerCase() === normalizedName.toLowerCase()
+    ));
+    if (hasDuplicatedName) {
+      openAlert('Já existe um sabor com esse nome.');
+      return;
+    }
+
+    if (flavorDraft.extraPrice.trim() && normalizeExtraPrice(flavorDraft.extraPrice) === null) {
+      openAlert('Preço extra inválido.');
+      return;
+    }
+
+    await dbPizzaFlavors.save({
+      id: flavorDraft.id || `pizza-flavor-${Date.now()}`,
+      name: normalizedName,
+      flavorType: flavorDraft.flavorType,
+      extraPrice: normalizeExtraPrice(flavorDraft.extraPrice),
+      active: flavorDraft.active,
+      tags: [],
+      ingredients: [],
+      priceDeltaBySize: null
+    });
+
+    setFlavorDraft(EMPTY_FLAVOR_DRAFT);
+    await loadPizzaFlavors();
+  };
+
+  const handleEditPizzaFlavor = (flavor: PizzaFlavor) => {
+    setFlavorDraft({
+      id: flavor.id,
+      name: flavor.name,
+      flavorType: flavor.flavorType === 'Doce' ? 'Doce' : 'Salgado',
+      extraPrice: typeof flavor.extraPrice === 'number' ? String(flavor.extraPrice) : '',
+      active: flavor.active !== false
+    });
+  };
+
+  const handleDeletePizzaFlavor = async (flavor: PizzaFlavor) => {
+    const confirmed = await openConfirm({
+      title: 'Excluir sabor global',
+      message: `Tem certeza que deseja excluir "${flavor.name}"?`,
+      confirmLabel: 'Excluir',
+      variant: 'danger'
+    });
+    if (!confirmed) return;
+
+    await dbPizzaFlavors.delete(flavor.id);
+
+    const pizzasToUpdate = menuItems.filter((item) => item.type === 'pizza' && (item.allowedFlavorIds || []).includes(flavor.id));
+    await Promise.all(pizzasToUpdate.map((item) => dbMenu.save({
+      ...item,
+      allowedFlavorIds: (item.allowedFlavorIds || []).filter((id) => id !== flavor.id)
+    })));
+
+    setMenuItems((prev) => prev.map((item) => item.type === 'pizza'
+      ? { ...item, allowedFlavorIds: (item.allowedFlavorIds || []).filter((id) => id !== flavor.id) }
+      : item));
+
+    await loadPizzaFlavors();
+  };
+
+  const filteredPizzaFlavors = globalPizzaFlavors.filter((flavor) => {
+    const matchName = !pizzaFlavorQuery.trim() || flavor.name.toLowerCase().includes(pizzaFlavorQuery.trim().toLowerCase());
+    const normalizedType = flavor.flavorType === 'Doce' ? 'Doce' : 'Salgado';
+    const matchType = pizzaFlavorTypeFilter === 'Todos' || pizzaFlavorTypeFilter === normalizedType;
+    return matchName && matchType;
+  });
+
+  const renderPizzaFlavorsGlobalList = () => (
+    <div className="bg-stone-50 dark:bg-stone-800/50 rounded-3xl p-6 border border-stone-100 dark:border-stone-800 flex flex-col h-full">
+      <h3 className="text-xs font-black uppercase text-stone-400 tracking-widest mb-4 flex items-center gap-2">
+        <Pizza size={14} className="text-orange-500" /> Sabores de Pizza
+      </h3>
+
+      <div className="space-y-2 mb-4">
+        <input
+          value={flavorDraft.name}
+          onChange={(e) => setFlavorDraft((prev) => ({ ...prev, name: e.target.value }))}
+          placeholder="Nome do sabor"
+          className="w-full bg-white dark:bg-stone-900 px-4 py-3 rounded-xl border border-stone-200 dark:border-stone-700 text-sm font-bold"
+        />
+        <div className="grid grid-cols-2 gap-2">
+          <select
+            value={flavorDraft.flavorType}
+            onChange={(e) => setFlavorDraft((prev) => ({ ...prev, flavorType: e.target.value as 'Salgado' | 'Doce' }))}
+            className="bg-white dark:bg-stone-900 px-4 py-3 rounded-xl border border-stone-200 dark:border-stone-700 text-sm font-bold"
+          >
+            <option value="Salgado">Salgado</option>
+            <option value="Doce">Doce</option>
+          </select>
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            value={flavorDraft.extraPrice}
+            onChange={(e) => setFlavorDraft((prev) => ({ ...prev, extraPrice: e.target.value }))}
+            placeholder="Preço extra"
+            className="bg-white dark:bg-stone-900 px-4 py-3 rounded-xl border border-stone-200 dark:border-stone-700 text-sm font-bold"
+          />
+        </div>
+        <label className="text-xs font-bold text-stone-600 flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={flavorDraft.active}
+            onChange={(e) => setFlavorDraft((prev) => ({ ...prev, active: e.target.checked }))}
+          />
+          Ativo
+        </label>
+        <div className="flex gap-2">
+          <button onClick={handleSavePizzaFlavor} className="bg-stone-900 dark:bg-stone-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase flex-1">
+            {flavorDraft.id ? 'Salvar edição' : 'Novo sabor'}
+          </button>
+          {flavorDraft.id && (
+            <button onClick={() => setFlavorDraft(EMPTY_FLAVOR_DRAFT)} className="px-4 py-2 rounded-xl text-xs font-black uppercase bg-stone-200 text-stone-600">
+              Cancelar
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        <input
+          value={pizzaFlavorQuery}
+          onChange={(e) => setPizzaFlavorQuery(e.target.value)}
+          placeholder="Buscar por nome"
+          className="bg-white dark:bg-stone-900 px-4 py-2 rounded-xl border border-stone-200 dark:border-stone-700 text-sm"
+        />
+        <select
+          value={pizzaFlavorTypeFilter}
+          onChange={(e) => setPizzaFlavorTypeFilter(e.target.value as FlavorTypeFilter)}
+          className="bg-white dark:bg-stone-900 px-4 py-2 rounded-xl border border-stone-200 dark:border-stone-700 text-sm"
+        >
+          <option value="Todos">Todos os tipos</option>
+          <option value="Salgado">Salgado</option>
+          <option value="Doce">Doce</option>
+        </select>
+      </div>
+
+      <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-2 max-h-[400px]">
+        {filteredPizzaFlavors.map((flavor) => (
+          <div key={flavor.id} className="flex items-center justify-between p-3 bg-white dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-800">
+            <div>
+              <p className="text-sm font-bold text-stone-700 dark:text-stone-300">{flavor.name}</p>
+              <p className="text-[11px] text-stone-500">
+                {flavor.flavorType === 'Doce' ? 'Doce' : 'Salgado'} • {typeof flavor.extraPrice === 'number' ? `+R$ ${flavor.extraPrice.toFixed(2)}` : 'Sem adicional'}
+              </p>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-lg ${flavor.active !== false ? 'bg-green-100 text-green-700' : 'bg-zinc-100 text-zinc-500'}`}>
+                {flavor.active !== false ? 'Ativo' : 'Inativo'}
+              </span>
+              <button onClick={() => handleEditPizzaFlavor(flavor)} className="p-2 text-stone-400 hover:text-orange-500 rounded-lg"><Edit2 size={14} /></button>
+              <button onClick={() => handleDeletePizzaFlavor(flavor)} className="p-2 text-stone-400 hover:text-red-500 rounded-lg"><Trash2 size={14} /></button>
+            </div>
+          </div>
+        ))}
+        {filteredPizzaFlavors.length === 0 && <div className="text-center text-stone-400 text-xs py-10 italic">Nenhum sabor encontrado.</div>}
+      </div>
+    </div>
+  );
 
   const renderGlobalList = (type: 'category' | 'tag' | 'ingredient', list: string[], icon: React.ElementType, title: string, placeholder: string) => (
     <div className="bg-stone-50 dark:bg-stone-800/50 rounded-3xl p-6 border border-stone-100 dark:border-stone-800 flex flex-col h-full">
@@ -1320,10 +1530,11 @@ const MenuManager: React.FC = () => {
                       </div>
                   </div>
 
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 h-full">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6 lg:gap-8 h-full">
                       {renderGlobalList('category', categories, List, 'Categorias', 'Nova Categoria')}
                       {renderGlobalList('tag', globalTags, Tag, 'Selos e Tags', 'Novo Selo/Tag')}
                       {renderGlobalList('ingredient', globalIngredients, List, 'Ingredientes', 'Novo Ingrediente')}
+                      {renderPizzaFlavorsGlobalList()}
                   </div>
               </div>
            </div>

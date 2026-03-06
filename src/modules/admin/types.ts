@@ -58,6 +58,7 @@ export interface MenuItem {
   extras: ExtraItem[];
   pricingStrategy?: PizzaPricingStrategy;
   sizes?: PizzaSizeOption[];
+  allowedFlavorIds?: string[];
 }
 
 export interface Category {
