@@ -321,7 +321,6 @@ const MenuManager: React.FC = () => {
     setEditingId(item.id);
     setLocalImagePreview(item.imageUrl || '');
     setImageUploadError(null);
-    setWizardStep(1);
     setNormalBaseline(getNormalSnapshot({
       name: item.name,
       category: item.category,
@@ -465,7 +464,6 @@ const MenuManager: React.FC = () => {
     });
     setEditingId(null);
     setNewItemType('normal');
-    setWizardStep(1);
     setEditingPizzaBase(null);
     setDirtyNormal(false);
     setDirtyPizza(false);
