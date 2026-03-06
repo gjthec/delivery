@@ -1222,9 +1222,9 @@ const MenuManager: React.FC = () => {
                         <div className="space-y-2">
                           <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Estratégia de preço</label>
                           <select value={formData.pricingStrategy} onChange={e => setFormData(p => ({ ...p, pricingStrategy: e.target.value as 'highestFlavor' | 'averageFlavor' | 'fixedBySize' }))} className="w-full bg-stone-50 dark:bg-stone-800 p-3 rounded-2xl border border-stone-200 dark:border-stone-700 font-bold">
-                            <option value="highestFlavor">highestFlavor (padrão)</option>
-                            <option value="averageFlavor">averageFlavor</option>
-                            <option value="fixedBySize">fixedBySize</option>
+                            <option value="highestFlavor">Maior sabor (padrão)</option>
+                            <option value="averageFlavor">Média dos sabores</option>
+                            <option value="fixedBySize">Fixo por tamanho</option>
                           </select>
                         </div>
                         <button type="button" onClick={addPizzaSize} className="px-4 py-2 rounded-xl bg-orange-500 text-white text-[10px] font-black uppercase">Adicionar tamanho</button>

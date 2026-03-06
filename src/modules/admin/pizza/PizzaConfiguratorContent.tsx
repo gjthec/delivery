@@ -33,9 +33,15 @@ const STEP_SUMMARY: Record<StepId, string> = {
 };
 
 const pricingDescriptions: Record<PizzaPricingStrategy, string> = {
-  highestFlavor: 'Mais comum: se escolher 2+ sabores, o preço considera o sabor mais caro.',
+  highestFlavor: 'Mais comum: se escolher 2 ou mais sabores, o preço considera o sabor mais caro.',
   averageFlavor: 'O preço final usa a média dos sabores escolhidos.',
-  fixedBySize: 'O preço depende só do tamanho (os sabores não mudam o valor).'
+  fixedBySize: 'O preço depende somente do tamanho; os sabores não alteram o valor.'
+};
+
+const pricingLabels: Record<PizzaPricingStrategy, string> = {
+  highestFlavor: 'Maior sabor',
+  averageFlavor: 'Média dos sabores',
+  fixedBySize: 'Fixo por tamanho'
 };
 
 const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories, onSaved, onDirtyChange }) => {
@@ -255,7 +261,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories, onSa
             <div className="space-y-3">
               {(['highestFlavor', 'averageFlavor', 'fixedBySize'] as PizzaPricingStrategy[]).map((strategy) => (
                 <button key={strategy} onClick={() => setPricingStrategy(strategy)} className={`w-full p-4 rounded-2xl border text-left ${pricingStrategy === strategy ? 'border-orange-500 bg-orange-50/50' : 'border-stone-200'}`}>
-                  <p className="font-black text-sm">{strategy}</p>
+                  <p className="font-black text-sm">{pricingLabels[strategy]}</p>
                   <p className="text-xs text-stone-500">{pricingDescriptions[strategy]}</p>
                 </button>
               ))}
@@ -327,7 +333,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories, onSa
             ))}
           </div>
           <div className="w-40 h-40 mx-auto rounded-full border-4 border-stone-200" style={{ background: `conic-gradient(#f97316 0deg ${360 / Math.max(previewSize?.maxFlavors || 1, 1)}deg, #fb923c 0deg)` }} />
-          <p className="text-xs font-semibold text-stone-600">Exemplo ({pricingStrategy}): pizza {previewSize?.label || '-'} com 2 sabores.</p>
+          <p className="text-xs font-semibold text-stone-600">Exemplo ({pricingLabels[pricingStrategy]}): pizza {previewSize?.label || '-'} com 2 sabores.</p>
           <p className="text-sm font-black text-orange-600">R$ {Number((previewSize?.basePrice || 0) + (pricingStrategy === 'averageFlavor' ? 2 : pricingStrategy === 'highestFlavor' ? 3 : 0)).toFixed(2)}</p>
         </div>
       </div>
