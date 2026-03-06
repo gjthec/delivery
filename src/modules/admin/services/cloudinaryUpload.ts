@@ -8,7 +8,7 @@ export async function uploadImageToCloudinary(file: File): Promise<CloudinaryUpl
   const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
   if (!cloudName || !uploadPreset) {
-    throw new Error('Cloudinary não configurado. Defina VITE_CLOUDINARY_CLOUD_NAME e VITE_CLOUDINARY_UPLOAD_PRESET.');
+    throw new Error('Cloudinary não configurado corretamente. Defina VITE_CLOUDINARY_CLOUD_NAME e VITE_CLOUDINARY_UPLOAD_PRESET no .env e reinicie o servidor.');
   }
 
   const formData = new FormData();
@@ -20,11 +20,11 @@ export async function uploadImageToCloudinary(file: File): Promise<CloudinaryUpl
     body: formData
   });
 
-  if (!response.ok) {
-    throw new Error('Falha ao enviar imagem para o Cloudinary.');
-  }
+  const payload = await response.json() as { secure_url?: string; public_id?: string; error?: { message?: string } };
 
-  const payload = await response.json() as { secure_url?: string; public_id?: string };
+  if (!response.ok) {
+    throw new Error(payload?.error?.message || 'Falha ao enviar imagem para o Cloudinary.');
+  }
 
   if (!payload.secure_url || !payload.public_id) {
     throw new Error('Resposta inválida do Cloudinary.');

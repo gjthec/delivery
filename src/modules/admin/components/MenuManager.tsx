@@ -87,6 +87,7 @@ const MenuManager: React.FC = () => {
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [imageUploadError, setImageUploadError] = useState<string | null>(null);
   const [localImagePreview, setLocalImagePreview] = useState<string>('');
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
 
   const [alertModal, setAlertModal] = useState<{ title: string; message: string } | null>(null);
   const [confirmModal, setConfirmModal] = useState<{ title: string; message: string; confirmLabel?: string; variant?: 'danger' | 'default' } | null>(null);
@@ -372,17 +373,8 @@ const MenuManager: React.FC = () => {
 
     setLocalImagePreview(URL.createObjectURL(file));
     setImageUploadError(null);
-    setIsUploadingImage(true);
-
-    try {
-      const uploaded = await uploadImageToCloudinary(file);
-      setFormData((prev) => ({ ...prev, imageUrl: uploaded.secureUrl, imagePublicId: uploaded.publicId }));
-    } catch (error) {
-      setImageUploadError(error instanceof Error ? error.message : 'Falha ao fazer upload da imagem.');
-    } finally {
-      setIsUploadingImage(false);
-      event.target.value = '';
-    }
+    setSelectedImageFile(file);
+    event.target.value = '';
   };
 
   const handleSave = async () => {
@@ -409,6 +401,27 @@ const MenuManager: React.FC = () => {
       }
     }
 
+    let imageUrl = formData.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=800';
+    let imagePublicId = formData.imagePublicId || '';
+
+    if (selectedImageFile) {
+      setIsUploadingImage(true);
+      setImageUploadError(null);
+      try {
+        const uploaded = await uploadImageToCloudinary(selectedImageFile);
+        imageUrl = uploaded.secureUrl;
+        imagePublicId = uploaded.publicId;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Não foi possível enviar a imagem.';
+        setImageUploadError(message);
+        openAlert(message);
+        setIsUploadingImage(false);
+        return;
+      } finally {
+        setIsUploadingImage(false);
+      }
+    }
+
     const payload: MenuItem = {
       id: editingId || `b-${Date.now()}`,
       name: formData.name,
@@ -417,8 +430,8 @@ const MenuManager: React.FC = () => {
       costPrice: formData.costPrice ? parseFloat(formData.costPrice) : undefined,
       originalPrice: formData.originalPrice ? parseFloat(formData.originalPrice) : undefined,
       description: formData.description,
-      imageUrl: formData.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=800',
-      imagePublicId: formData.imagePublicId || undefined,
+      imageUrl,
+      imagePublicId: imagePublicId || undefined,
       rating: 5.0,
       preparationTime: '20 min',
       size: formData.size,
@@ -472,6 +485,7 @@ const MenuManager: React.FC = () => {
     setNewCategoryName('');
     setImageUploadError(null);
     setLocalImagePreview('');
+    setSelectedImageFile(null);
   };
 
   const resetNormalFlow = () => {
@@ -497,6 +511,7 @@ const MenuManager: React.FC = () => {
     setNormalBaseline('');
     setImageUploadError(null);
     setLocalImagePreview('');
+    setSelectedImageFile(null);
   };
 
   const resetPizzaFlow = () => {
@@ -1228,13 +1243,13 @@ const MenuManager: React.FC = () => {
                       </div>
 
                       <div className="space-y-2">
-                        <FieldLabel title="URL da imagem" help="Link da foto exibida no app." helper="Link da foto exibida no cardápio e no app." className="ml-2 space-y-1" />
-                        <div className="relative">
-                          <ImageIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
-                          <input value={formData.imageUrl} onChange={e => setFormData(p => ({...p, imageUrl: e.target.value}))} className="w-full bg-stone-50 dark:bg-stone-800 pl-12 pr-4 py-4 rounded-2xl border border-stone-200 dark:border-stone-700 font-bold outline-none focus:border-orange-500 dark:text-white" placeholder="https://..." />
-                        </div>
-                        <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-                          <input type="file" accept="image/*" onChange={handleImageFileChange} className="text-xs" />
+                        <FieldLabel title="Imagem" help="Selecione uma foto do seu computador." helper="A imagem será enviada automaticamente para o Cloudinary ao salvar." className="ml-2 space-y-1" />
+                        <div className="flex items-center gap-2">
+                          <label className="px-4 py-3 rounded-2xl bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 font-bold text-sm text-stone-600 dark:text-stone-300 cursor-pointer hover:border-orange-400 transition-all inline-flex items-center gap-2">
+                            <ImageIcon size={16} /> Selecionar imagem
+                            <input type="file" accept="image/*" onChange={handleImageFileChange} className="hidden" />
+                          </label>
+                          {selectedImageFile && <span className="text-[11px] text-stone-500 font-bold truncate max-w-[180px]">{selectedImageFile.name}</span>}
                           {isUploadingImage && <span className="text-[11px] text-orange-500 font-bold">Enviando imagem...</span>}
                         </div>
                         {imageUploadError && <p className="text-[11px] text-red-500">{imageUploadError}</p>}

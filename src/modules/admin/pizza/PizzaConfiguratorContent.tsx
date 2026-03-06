@@ -44,6 +44,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories, onSa
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [imageUploadError, setImageUploadError] = useState<string | null>(null);
   const [localImagePreview, setLocalImagePreview] = useState('');
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
 
   const [flavors, setFlavors] = useState<PizzaFlavor[]>([]);
   const [flavorNameInput, setFlavorNameInput] = useState('');
@@ -107,18 +108,8 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories, onSa
 
     setLocalImagePreview(URL.createObjectURL(file));
     setImageUploadError(null);
-    setIsUploadingImage(true);
-
-    try {
-      const uploaded = await uploadImageToCloudinary(file);
-      setImageUrl(uploaded.secureUrl);
-      setImagePublicId(uploaded.publicId);
-    } catch (error) {
-      setImageUploadError(error instanceof Error ? error.message : 'Falha ao fazer upload da imagem.');
-    } finally {
-      setIsUploadingImage(false);
-      event.target.value = '';
-    }
+    setSelectedImageFile(file);
+    event.target.value = '';
   };
 
   const canSavePizza = sizes.length > 0 && sizes.every((size) => size.label.trim() && size.basePrice >= 0);
@@ -198,6 +189,24 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories, onSa
 
     setIsSaving(true);
     try {
+      let resolvedImageUrl = imageUrl || 'https://images.unsplash.com/photo-1513104890138-7c749659a591?q=80&w=800';
+      let resolvedImagePublicId = imagePublicId || '';
+
+      if (selectedImageFile) {
+        setIsUploadingImage(true);
+        setImageUploadError(null);
+        try {
+          const uploaded = await uploadImageToCloudinary(selectedImageFile);
+          resolvedImageUrl = uploaded.secureUrl;
+          resolvedImagePublicId = uploaded.publicId;
+        } catch (error) {
+          setImageUploadError(error instanceof Error ? error.message : 'Não foi possível enviar a imagem.');
+          return;
+        } finally {
+          setIsUploadingImage(false);
+        }
+      }
+
       const payload: MenuItem = removeUndefinedDeep({
         id: pizzaBase?.id || `pizza-${Date.now()}`,
         type: 'pizza',
@@ -205,8 +214,8 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories, onSa
         category,
         price: sizes[0]?.basePrice || 0,
         description,
-        imageUrl: imageUrl || 'https://images.unsplash.com/photo-1513104890138-7c749659a591?q=80&w=800',
-        imagePublicId: imagePublicId || undefined,
+        imageUrl: resolvedImageUrl,
+        imagePublicId: resolvedImagePublicId || undefined,
         rating: 5,
         preparationTime: '30 min',
         size: 'M',
@@ -240,9 +249,12 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories, onSa
             <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700">
               {categories.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
-            <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="Imagem (opcional) • URL da imagem" className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700" />
             <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-              <input type="file" accept="image/*" onChange={handleImageFileChange} className="text-xs" />
+              <label className="px-4 py-3 rounded-2xl bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 font-bold text-sm text-stone-600 dark:text-stone-300 cursor-pointer hover:border-orange-400 transition-all inline-flex items-center gap-2 w-fit">
+                Selecionar imagem
+                <input type="file" accept="image/*" onChange={handleImageFileChange} className="hidden" />
+              </label>
+              {selectedImageFile && <span className="text-[11px] text-stone-500 font-bold truncate max-w-[180px]">{selectedImageFile.name}</span>}
               {isUploadingImage && <span className="text-[11px] text-orange-500 font-bold">Enviando imagem...</span>}
             </div>
             {imageUploadError && <p className="text-[11px] text-red-500">{imageUploadError}</p>}
