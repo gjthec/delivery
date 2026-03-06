@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Utensils, ClipboardList, TrendingUp, Sparkles, Package, LogOut, HeartHandshake, SmilePlus, Settings } from 'lucide-react';
+import { LayoutDashboard, Utensils, ClipboardList, TrendingUp, Sparkles, Package, LogOut, HeartHandshake, SmilePlus, Settings, Pizza } from 'lucide-react';
 import { useCompanyName } from '../../../hooks/useCompanyName';
 
 interface SidebarProps {
@@ -14,6 +14,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout }) 
   const mainItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'menu', label: 'Cardápio', icon: Utensils },
+    { id: 'pizza-flavors', label: 'Sabores de Pizza', icon: Pizza },
     { id: 'orders', label: 'Pedidos', icon: ClipboardList },
     { id: 'clientes-fieis', label: 'Clientes Fiéis', icon: HeartHandshake },
     { id: 'satisfacao', label: 'Satisfação', icon: SmilePlus },

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MenuItem, ExtraItem, Coupon, PizzaFlavor, PizzaSizeOption } from '../types';
+import { MenuItem, ExtraItem, Coupon, PizzaSizeOption } from '../types';
 import { improveMenuItem } from '../services/aiService'; // Adjusted path
-import { dbMenu, dbCatalog, dbCoupons, dbSettings, dbPizzaFlavors } from '../services/dbService'; // Adjusted path
+import { dbMenu, dbCatalog, dbCoupons, dbSettings } from '../services/dbService'; // Adjusted path
 import { 
   Plus, Edit2, Trash2, X, Sparkles, RefreshCw,
   Image as ImageIcon, Tag, List, PlusCircle, MinusCircle, DollarSign,
@@ -29,9 +29,6 @@ const MenuManager: React.FC = () => {
 
   // Store Settings State
   const [deliveryFee, setDeliveryFee] = useState<string>('');
-  const [pizzaFlavors, setPizzaFlavors] = useState<PizzaFlavor[]>([]);
-  const [pizzaFlavorDraft, setPizzaFlavorDraft] = useState<PizzaFlavor>({ id: '', name: '', flavorType: 'Salgado', tags: [], ingredients: [], active: true, priceDeltaBySize: null });
-  const [pizzaFlavorSearch, setPizzaFlavorSearch] = useState('');
 
   // View & Sort States
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -133,7 +130,6 @@ const MenuManager: React.FC = () => {
         loadCatalogs(menuData),
         loadCoupons(),
         loadSettings(),
-        loadPizzaFlavors(),
       ]);
     };
 
@@ -188,11 +184,6 @@ const MenuManager: React.FC = () => {
     setCoupons(data);
   };
 
-
-  const loadPizzaFlavors = async () => {
-    const data = await dbPizzaFlavors.getAll();
-    setPizzaFlavors(data);
-  };
 
 
   const loadSettings = async () => {
@@ -578,35 +569,6 @@ const MenuManager: React.FC = () => {
     } 
   };
   const removeExtra = (index: number) => { setFormData(p => ({ ...p, extras: p.extras.filter((_, i) => i !== index) })); };
-
-
-  const savePizzaFlavor = async () => {
-    const normalizedName = pizzaFlavorDraft.name.trim();
-    if (!normalizedName) return;
-
-    const id = pizzaFlavorDraft.id || `flavor-${Date.now()}`;
-    await dbPizzaFlavors.save({
-      id,
-      name: normalizedName,
-      flavorType: pizzaFlavorDraft.flavorType === 'Doce' ? 'Doce' : 'Salgado',
-      tags: [],
-      ingredients: [],
-      active: true,
-      priceDeltaBySize: null,
-      description: null,
-      imageUrl: null
-    });
-
-    setPizzaFlavorDraft({ id: '', name: '', flavorType: 'Salgado', tags: [], ingredients: [], active: true, priceDeltaBySize: null });
-    loadPizzaFlavors();
-  };
-
-  const filteredPizzaFlavors = pizzaFlavors.filter((flavor) => {
-    const query = pizzaFlavorSearch.trim().toLowerCase();
-    if (!query) return true;
-    return flavor.name.toLowerCase().includes(query)
-      || (flavor.flavorType || '').toLowerCase().includes(query);
-  });
 
 
 
@@ -1355,32 +1317,6 @@ const MenuManager: React.FC = () => {
                           >
                              Salvar
                           </button>
-                      </div>
-                  </div>
-
-                  <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-3xl p-5 mb-6 space-y-4">
-                      <h3 className="text-xs font-black uppercase tracking-[0.2em] text-stone-400">Novo Sabor</h3>
-                      <p className="text-xs text-stone-500">Cadastre os sabores separadamente dos cards de pizza.</p>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <input value={pizzaFlavorDraft.name} onChange={(e) => setPizzaFlavorDraft((prev) => ({ ...prev, name: e.target.value }))} className="bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700 font-bold" placeholder="Ex: Calabresa, Portuguesa, Chocolate" />
-                        <select value={pizzaFlavorDraft.flavorType || 'Salgado'} onChange={(e) => setPizzaFlavorDraft((prev) => ({ ...prev, flavorType: e.target.value as 'Salgado' | 'Doce' }))} className="bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700 font-bold">
-                          <option value="Salgado">Salgado</option>
-                          <option value="Doce">Doce</option>
-                        </select>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <button onClick={savePizzaFlavor} className="px-4 py-2 rounded-xl bg-orange-500 text-white font-black uppercase text-[10px]">Salvar sabor</button>
-                        <input value={pizzaFlavorSearch} onChange={(e) => setPizzaFlavorSearch(e.target.value)} placeholder="Buscar sabor" className="ml-auto bg-stone-50 dark:bg-stone-800 px-4 py-2 rounded-xl border border-stone-200 dark:border-stone-700 text-xs font-bold" />
-                      </div>
-                      <div className="max-h-52 overflow-y-auto space-y-2">
-                        {filteredPizzaFlavors.map((flavor) => (
-                          <button key={flavor.id} onClick={() => {
-                            setPizzaFlavorDraft({ ...flavor, flavorType: flavor.flavorType === 'Doce' ? 'Doce' : 'Salgado' });
-                          }} className="w-full text-left rounded-2xl border border-stone-200 dark:border-stone-700 p-3 hover:border-orange-300 transition-colors">
-                            <p className="text-xs font-black text-stone-700 dark:text-stone-100">{flavor.name}</p>
-                            <p className="text-[11px] text-stone-500 truncate">Tipo: {flavor.flavorType === 'Doce' ? 'Doce' : 'Salgado'}</p>
-                          </button>
-                        ))}
                       </div>
                   </div>
 

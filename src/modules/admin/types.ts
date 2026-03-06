@@ -29,6 +29,7 @@ export interface PizzaFlavor {
   id: string;
   name: string;
   flavorType?: 'Salgado' | 'Doce';
+  extraPrice?: number | null;
   description?: string | null;
   imageUrl?: string | null;
   tags: string[];
