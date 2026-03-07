@@ -411,31 +411,67 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
   return (
     <div className="flex flex-col min-h-0 relative">
       <div className="flex-1 overflow-y-auto p-6 lg:px-12 space-y-6">
-        <section className="space-y-3">
-          <h3 className="text-sm font-black">Informações básicas</h3>
-          <div className="grid sm:grid-cols-2 gap-2">
-            <select value={selectedPizzaTypeId} onChange={(e) => setSelectedPizzaTypeId(e.target.value)} className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700 font-semibold">
-              {pizzaTypes.map((type) => (
-                <option key={type.id} value={type.id}>{type.typeName}</option>
-              ))}
-            </select>
-            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-              <label className="px-4 py-3 rounded-2xl bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 font-bold text-sm text-stone-600 dark:text-stone-300 cursor-pointer hover:border-orange-400 transition-all inline-flex items-center gap-2 w-fit">
-                Selecionar imagem
-                <input type="file" accept="image/*" onChange={handleImageFileChange} className="hidden" />
-              </label>
-              {selectedImageFile && <span className="text-[11px] text-stone-500 font-bold truncate max-w-[180px]">{selectedImageFile.name}</span>}
-              {isUploadingImage && <span className="text-[11px] text-orange-500 font-bold">Enviando imagem...</span>}
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:col-span-2">
-              <input type="number" min={0} step="0.01" value={selectedPizzaType?.basePrice ?? 0} onChange={(e) => updateSelectedPizzaType('basePrice', e.target.value)} placeholder="Preço base" className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700" />
-              <input type="number" min={1} value={selectedPizzaType?.slices ?? 1} onChange={(e) => updateSelectedPizzaType('slices', e.target.value)} placeholder="Fatias" className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700" />
-              <input type="number" min={1} max={4} value={selectedPizzaType?.maxFlavors ?? 1} onChange={(e) => updateSelectedPizzaType('maxFlavors', e.target.value)} placeholder="Máx. sabores" className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700" />
-            </div>
-            {imageUploadError && <p className="text-[11px] text-red-500 sm:col-span-2">{imageUploadError}</p>}
-            {(localImagePreview || imageUrl) && <img src={localImagePreview || imageUrl} alt="Prévia" className="w-20 h-20 rounded-xl object-cover border border-stone-200 sm:col-span-2" />}
+        <section className="space-y-4">
+          <div>
+            <h3 className="text-sm font-black">Informações básicas</h3>
+            <p className="text-xs text-stone-500 mt-1">Preencha os dados principais para publicar o card da pizza com clareza para o cliente.</p>
           </div>
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Descrição da pizza" className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700" />
+
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-black uppercase tracking-[0.08em] text-stone-500">Tipo da pizza</label>
+              <p className="text-[11px] text-stone-500">Selecione o tipo que será exibido para esse card.</p>
+              <select value={selectedPizzaTypeId} onChange={(e) => setSelectedPizzaTypeId(e.target.value)} className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700 font-semibold">
+                {pizzaTypes.map((type) => (
+                  <option key={type.id} value={type.id}>{type.typeName}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5 rounded-2xl border border-stone-200 dark:border-stone-700 p-3 bg-stone-50/60 dark:bg-stone-800/50">
+              <label className="text-[11px] font-black uppercase tracking-[0.08em] text-stone-500">Imagem da pizza</label>
+              <p className="text-[11px] text-stone-500">Escolha a imagem de capa que aparecerá para o cliente.</p>
+              <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                <label className="px-4 py-3 rounded-2xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 font-bold text-sm text-stone-600 dark:text-stone-300 cursor-pointer hover:border-orange-400 transition-all inline-flex items-center gap-2 w-fit">
+                  Selecionar imagem
+                  <input type="file" accept="image/*" onChange={handleImageFileChange} className="hidden" />
+                </label>
+                {selectedImageFile && <span className="text-[11px] text-stone-500 font-bold truncate max-w-[180px]">{selectedImageFile.name}</span>}
+                {isUploadingImage && <span className="text-[11px] text-orange-500 font-bold">Enviando imagem...</span>}
+              </div>
+              {(localImagePreview || imageUrl) && <img src={localImagePreview || imageUrl} alt="Prévia" className="w-20 h-20 rounded-xl object-cover border border-stone-200" />}
+              {imageUploadError && <p className="text-[11px] text-red-500">{imageUploadError}</p>}
+            </div>
+
+            <div className="sm:col-span-2 space-y-2">
+              <p className="text-[11px] font-black uppercase tracking-[0.08em] text-stone-500">Regras do tipo selecionado</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <label className="space-y-1.5">
+                  <span className="text-[11px] font-black uppercase tracking-[0.08em] text-stone-500">Preço base</span>
+                  <span className="block text-[11px] text-stone-500">Defina o valor inicial desta pizza.</span>
+                  <input type="number" min={0} step="0.01" value={selectedPizzaType?.basePrice ?? 0} onChange={(e) => updateSelectedPizzaType('basePrice', e.target.value)} placeholder="Ex: 49,90" className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700" />
+                </label>
+
+                <label className="space-y-1.5">
+                  <span className="text-[11px] font-black uppercase tracking-[0.08em] text-stone-500">Quantidade de fatias</span>
+                  <span className="block text-[11px] text-stone-500">Informe em quantas fatias essa pizza será dividida.</span>
+                  <input type="number" min={1} value={selectedPizzaType?.slices ?? 1} onChange={(e) => updateSelectedPizzaType('slices', e.target.value)} placeholder="Ex: 8" className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700" />
+                </label>
+
+                <label className="space-y-1.5">
+                  <span className="text-[11px] font-black uppercase tracking-[0.08em] text-stone-500">Máximo de sabores</span>
+                  <span className="block text-[11px] text-stone-500">Defina quantos sabores o cliente poderá selecionar.</span>
+                  <input type="number" min={1} max={4} value={selectedPizzaType?.maxFlavors ?? 1} onChange={(e) => updateSelectedPizzaType('maxFlavors', e.target.value)} placeholder="Ex: 2" className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700" />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-black uppercase tracking-[0.08em] text-stone-500">Descrição da pizza</label>
+            <p className="text-[11px] text-stone-500">Escreva uma descrição curta para apresentar essa pizza ao cliente.</p>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ex: Massa leve, molho artesanal e cobertura especial da casa." className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700" />
+          </div>
         </section>
 
         <section className="space-y-3">
