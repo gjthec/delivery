@@ -32,6 +32,8 @@ const defaultSize = (): PizzaSizeOption => ({
 
 const MAX_FLAVOR_OPTIONS = [1, 2, 3, 4] as const;
 const PIZZA_CATEGORY = 'Pizzas';
+const PIZZA_TYPES = ['Pizza Pequena', 'Pizza Média', 'Pizza Grande', 'Pizza Gigante'] as const;
+type PizzaTypeOption = typeof PIZZA_TYPES[number];
 
 interface QuickFlavorDraft {
   name: string;
@@ -53,7 +55,7 @@ const EMPTY_QUICK_FLAVOR_DRAFT: QuickFlavorDraft = {
 
 const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _categories, onSaved, onDirtyChange }) => {
   const [isSaving, setIsSaving] = useState(false);
-  const [name, setName] = useState('');
+  const [pizzaType, setPizzaType] = useState<PizzaTypeOption>('Pizza Média');
   const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [imagePublicId, setImagePublicId] = useState('');
@@ -69,6 +71,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
   const [flavorTypeFilter, setFlavorTypeFilter] = useState<'Todos' | 'Salgados' | 'Doces'>('Todos');
   const [isQuickCreateOpen, setIsQuickCreateOpen] = useState(false);
   const [isSavingQuickFlavor, setIsSavingQuickFlavor] = useState(false);
+  const [editingFlavorId, setEditingFlavorId] = useState<string | null>(null);
   const [quickFlavorDraft, setQuickFlavorDraft] = useState<QuickFlavorDraft>(EMPTY_QUICK_FLAVOR_DRAFT);
   const [quickFlavorMessage, setQuickFlavorMessage] = useState<string | null>(null);
   const [quickFlavorError, setQuickFlavorError] = useState<string | null>(null);
@@ -89,7 +92,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
     const normalizedSizes = existingSizes.map((size) => ({ ...size, maxFlavors: Math.max(1, Math.min(4, size.maxFlavors || initialMaxFlavors)), slices: size.slices ?? null }));
 
     const snapshot = {
-      name: pizzaBase?.name || 'Pizza da Casa',
+      pizzaType: (pizzaBase?.pizzaType && PIZZA_TYPES.includes(pizzaBase.pizzaType as PizzaTypeOption) ? pizzaBase.pizzaType : (PIZZA_TYPES.includes((pizzaBase?.name || '') as PizzaTypeOption) ? pizzaBase?.name : 'Pizza Média')) as PizzaTypeOption,
       category: PIZZA_CATEGORY,
       description: pizzaBase?.description || '',
       imageUrl: pizzaBase?.imageUrl || '',
@@ -98,7 +101,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
       allowedFlavorIds: pizzaBase?.allowedFlavorIds || []
     };
 
-    setName(snapshot.name);
+    setPizzaType(snapshot.pizzaType);
     setDescription(snapshot.description);
     setImageUrl(snapshot.imageUrl);
     setImagePublicId(snapshot.imagePublicId);
@@ -111,7 +114,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
   useEffect(() => {
     if (!initialSnapshot) return;
     const snapshot = JSON.stringify({
-      name,
+      pizzaType,
       category: PIZZA_CATEGORY,
       description,
       imageUrl,
@@ -120,7 +123,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
       allowedFlavorIds: selectedFlavorIds
     });
     onDirtyChange?.(snapshot !== initialSnapshot);
-  }, [name, description, imageUrl, imagePublicId, sizes, selectedFlavorIds, initialSnapshot, onDirtyChange]);
+  }, [pizzaType, description, imageUrl, imagePublicId, sizes, selectedFlavorIds, initialSnapshot, onDirtyChange]);
 
   const handleImageFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -143,13 +146,14 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
   };
 
   const resetQuickFlavorForm = () => {
+    setEditingFlavorId(null);
     setQuickFlavorDraft(EMPTY_QUICK_FLAVOR_DRAFT);
     setQuickFlavorImageFile(null);
     setQuickFlavorImagePreview('');
     setQuickFlavorImageUploadError(null);
   };
 
-  const canSavePizza = sizes.length > 0 && sizes.every((size) => size.label.trim() && size.basePrice >= 0);
+  const canSavePizza = Boolean(pizzaType) && sizes.length > 0 && sizes.every((size) => size.label.trim() && size.basePrice >= 0);
 
   const addSize = () => {
     setSizes((prev) => [...prev, defaultSize()]);
@@ -172,7 +176,6 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
   const filteredFlavors = useMemo(() => {
     const normalizedQuery = flavorQuery.trim().toLowerCase();
     return pizzaFlavors.filter((flavor) => {
-      if (flavor.active === false) return false;
       const type = flavor.flavorType === 'Doce' ? 'Doces' : 'Salgados';
       const matchType = flavorTypeFilter === 'Todos' || flavorTypeFilter === type;
       const matchName = !normalizedQuery || flavor.name.toLowerCase().includes(normalizedQuery);
@@ -210,6 +213,31 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
     }));
   };
 
+
+  const toDraftFromFlavor = (flavor: PizzaFlavor): QuickFlavorDraft => ({
+    name: flavor.name || '',
+    flavorType: flavor.flavorType === 'Doce' ? 'Doce' : 'Salgado',
+    imageUrl: flavor.imageUrl || '',
+    extraPrice: typeof flavor.extraPrice === 'number' ? String(flavor.extraPrice) : '',
+    active: flavor.active !== false,
+    ingredients: (flavor.ingredients || []).length ? flavor.ingredients.map((ingredient) => ingredient.name) : ['']
+  });
+
+  const handleEditFlavor = (flavor: PizzaFlavor) => {
+    setEditingFlavorId(flavor.id);
+    setQuickFlavorDraft(toDraftFromFlavor(flavor));
+    setQuickFlavorImageFile(null);
+    setQuickFlavorImagePreview(flavor.imageUrl || '');
+    setQuickFlavorError(null);
+    setQuickFlavorMessage(null);
+    setIsQuickCreateOpen(true);
+  };
+
+  const handleToggleFlavorStatus = async (flavor: PizzaFlavor) => {
+    await dbPizzaFlavors.toggleFlavorStatus(flavor.id, flavor.active === false);
+    await loadFlavors();
+  };
+
   const handleSaveQuickFlavor = async () => {
     const normalizedName = quickFlavorDraft.name.trim();
     if (!normalizedName) {
@@ -222,7 +250,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
       return;
     }
 
-    if (pizzaFlavors.some((flavor) => flavor.name.trim().toLowerCase() === normalizedName.toLowerCase())) {
+    if (pizzaFlavors.some((flavor) => flavor.id !== editingFlavorId && flavor.name.trim().toLowerCase() === normalizedName.toLowerCase())) {
       setQuickFlavorError('Já existe um sabor global com esse nome.');
       return;
     }
@@ -264,24 +292,35 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
         }
       }
 
-      const flavorId = `pizza-flavor-${Date.now()}`;
-      await dbPizzaFlavors.save({
+      const flavorId = editingFlavorId || `pizza-flavor-${Date.now()}`;
+      const createdAt = pizzaFlavors.find((flavor) => flavor.id === flavorId)?.createdAt || new Date().toISOString();
+      const payload: PizzaFlavor = {
         id: flavorId,
         name: normalizedName,
         flavorType: quickFlavorDraft.flavorType,
+        category: quickFlavorDraft.flavorType === 'Doce' ? 'doce' : 'salgada',
         imageUrl: resolvedFlavorImageUrl || undefined,
         extraPrice: normalizedExtraPrice,
         active: quickFlavorDraft.active,
+        isActive: quickFlavorDraft.active,
         tags: [],
         ingredients: normalizedIngredients,
+        createdAt,
+        updatedAt: new Date().toISOString(),
         priceDeltaBySize: null
-      });
+      };
+
+      if (editingFlavorId) {
+        await dbPizzaFlavors.updateFlavor(payload);
+      } else {
+        await dbPizzaFlavors.createFlavor(payload);
+      }
 
       const updatedFlavors = await dbPizzaFlavors.getAll();
       setPizzaFlavors(updatedFlavors);
       setSelectedFlavorIds((prev) => (prev.includes(flavorId) ? prev : [...prev, flavorId]));
       resetQuickFlavorForm();
-      setQuickFlavorMessage('Sabor criado com sucesso e vinculado à pizza.');
+      setQuickFlavorMessage(editingFlavorId ? 'Sabor atualizado com sucesso.' : 'Sabor criado com sucesso e vinculado à pizza.');
       setIsQuickCreateOpen(false);
     } catch (error) {
       setQuickFlavorError(error instanceof Error ? error.message : 'Não foi possível salvar o sabor agora.');
@@ -292,7 +331,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
 
   const handleSavePizza = async () => {
     if (isUploadingImage) return;
-    if (!name.trim() || !canSavePizza) return;
+    if (!pizzaType || !canSavePizza) return;
 
     setIsSaving(true);
     try {
@@ -317,7 +356,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
       const payload: MenuItem = removeUndefinedDeep({
         id: pizzaBase?.id || `pizza-${Date.now()}`,
         type: 'pizza',
-        name,
+        name: pizzaType,
         category: PIZZA_CATEGORY,
         price: sizes[0]?.basePrice || 0,
         description,
@@ -331,6 +370,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
         extras: [],
         pricingStrategy: 'fixedBySize' as PizzaPricingStrategy,
         allowedFlavorIds: selectedFlavorIds,
+        pizzaType,
         sizes: sizes.map((size) => ({
           id: size.id || `size-${Date.now()}`,
           label: size.label || 'Tamanho',
@@ -353,7 +393,11 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
         <section className="space-y-3">
           <h3 className="text-sm font-black">Informações básicas</h3>
           <div className="grid sm:grid-cols-2 gap-2">
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome da pizza (Ex: Pizza da Casa)" className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700" />
+            <select value={pizzaType} onChange={(e) => setPizzaType(e.target.value as PizzaTypeOption)} className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700 font-semibold">
+              {PIZZA_TYPES.map((type) => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
             <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
               <label className="px-4 py-3 rounded-2xl bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 font-bold text-sm text-stone-600 dark:text-stone-300 cursor-pointer hover:border-orange-400 transition-all inline-flex items-center gap-2 w-fit">
                 Selecionar imagem
@@ -419,6 +463,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
             </div>
             <button onClick={() => {
               setIsQuickCreateOpen((prev) => !prev);
+              if (!isQuickCreateOpen) resetQuickFlavorForm();
               setQuickFlavorError(null);
               setQuickFlavorMessage(null);
               setQuickFlavorImageUploadError(null);
@@ -441,7 +486,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
 
           {isQuickCreateOpen && (
             <div className="rounded-2xl border border-orange-200 dark:border-orange-500/40 p-4 space-y-3 bg-orange-50/50 dark:bg-orange-500/5">
-              <h4 className="text-xs font-black uppercase text-orange-700 dark:text-orange-300">Cadastrar novo sabor</h4>
+              <h4 className="text-xs font-black uppercase text-orange-700 dark:text-orange-300">{editingFlavorId ? 'Editar sabor' : 'Cadastrar novo sabor'}</h4>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <input value={quickFlavorDraft.name} onChange={(e) => setQuickFlavorDraft((prev) => ({ ...prev, name: e.target.value }))} placeholder="Ex: Calabresa" className="w-full bg-white dark:bg-stone-900 py-2.5 px-3 rounded-xl border border-stone-200 dark:border-stone-700 text-sm" />
@@ -496,7 +541,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
                   setQuickFlavorError(null);
                   setQuickFlavorMessage(null);
                 }} className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-black uppercase text-stone-500">Cancelar</button>
-                <button onClick={handleSaveQuickFlavor} disabled={isSavingQuickFlavor || isUploadingQuickFlavorImage} className="px-3 py-2 rounded-xl bg-orange-500 text-white text-xs font-black uppercase disabled:opacity-50">{isSavingQuickFlavor || isUploadingQuickFlavorImage ? 'Salvando...' : 'Salvar sabor'}</button>
+                <button onClick={handleSaveQuickFlavor} disabled={isSavingQuickFlavor || isUploadingQuickFlavorImage} className="px-3 py-2 rounded-xl bg-orange-500 text-white text-xs font-black uppercase disabled:opacity-50">{isSavingQuickFlavor || isUploadingQuickFlavorImage ? 'Salvando...' : editingFlavorId ? 'Atualizar sabor' : 'Salvar sabor'}</button>
               </div>
             </div>
           )}
@@ -511,10 +556,12 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {filteredFlavors.map((flavor) => {
                 const isSelected = selectedFlavorIds.includes(flavor.id);
+                const isInactive = flavor.active === false;
                 const typeLabel = flavor.flavorType === 'Doce' ? 'Doce' : 'Salgado';
                 const ingredientPreview = (flavor.ingredients || []).slice(0, 3).map((ingredient) => ingredient.name).join(', ');
                 return (
-                  <button key={flavor.id} onClick={() => toggleFlavorSelection(flavor.id)} className={`rounded-2xl border p-3 text-left transition-all ${isSelected ? 'border-orange-500 bg-orange-50 dark:bg-orange-500/10' : 'border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900'}`}>
+                  <div key={flavor.id} className={`rounded-2xl border p-3 text-left transition-all ${isSelected ? 'border-orange-500 bg-orange-50 dark:bg-orange-500/10' : 'border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900'} ${isInactive ? 'opacity-70' : ''}`}>
+                    <button onClick={() => toggleFlavorSelection(flavor.id)} disabled={isInactive} className="w-full text-left disabled:cursor-not-allowed">
                     <div className="flex items-center justify-between gap-2">
                       <div className="w-11 h-11 rounded-xl overflow-hidden border border-stone-200 dark:border-stone-700 bg-stone-100 dark:bg-stone-800 shrink-0">
                         {flavor.imageUrl ? (
@@ -528,9 +575,17 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
                         <p className="text-[11px] text-stone-500">{typeLabel} {typeof flavor.extraPrice === 'number' ? `• +R$ ${flavor.extraPrice.toFixed(2)}` : ''}</p>
                         <p className="text-[11px] text-stone-400 truncate">{ingredientPreview || 'Sem ingredientes cadastrados'}</p>
                       </div>
-                      {isSelected && <Check size={14} className="text-orange-500" />}
+                      <div className="flex items-center gap-2">
+                        {isInactive && <span className="text-[10px] font-black uppercase text-red-500">Inativo</span>}
+                        {isSelected && <Check size={14} className="text-orange-500" />}
+                      </div>
                     </div>
-                  </button>
+                    </button>
+                    <div className="mt-3 flex items-center justify-end gap-2">
+                      <button type="button" onClick={() => handleEditFlavor(flavor)} className="px-2.5 py-1.5 rounded-lg border border-stone-200 dark:border-stone-700 text-[10px] font-black uppercase text-stone-500">Editar</button>
+                      <button type="button" onClick={() => handleToggleFlavorStatus(flavor)} className="px-2.5 py-1.5 rounded-lg border border-stone-200 dark:border-stone-700 text-[10px] font-black uppercase text-stone-500">{isInactive ? 'Ativar' : 'Desativar'}</button>
+                    </div>
+                  </div>
                 );
               })}
             </div>

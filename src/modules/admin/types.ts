@@ -28,6 +28,7 @@ export interface Ingredient {
 export interface PizzaFlavor {
   id: string;
   name: string;
+  category?: string;
   flavorType?: 'Salgado' | 'Doce';
   extraPrice?: number | null;
   description?: string | null;
@@ -35,6 +36,9 @@ export interface PizzaFlavor {
   tags: string[];
   ingredients: Array<{ id: string; name: string }>;
   active: boolean;
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
   priceDeltaBySize?: Record<string, number> | null;
 }
 
@@ -59,6 +63,7 @@ export interface MenuItem {
   pricingStrategy?: PizzaPricingStrategy;
   sizes?: PizzaSizeOption[];
   allowedFlavorIds?: string[];
+  pizzaType?: 'Pizza Pequena' | 'Pizza Média' | 'Pizza Grande' | 'Pizza Gigante';
 }
 
 export interface Category {

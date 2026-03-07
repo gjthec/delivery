@@ -863,8 +863,24 @@ export const dbPizzaFlavors = {
         const snapshot = await getDocs(collection(db, ...ROOT_PATH, 'catalog', 'pizzaFlavors'));
         const items: PizzaFlavor[] = [];
         snapshot.forEach((docSnap) => {
-          const payload = docSnap.data() as PizzaFlavor;
-          items.push({ ...payload, id: docSnap.id, tags: Array.isArray(payload.tags) ? payload.tags : [], ingredients: Array.isArray(payload.ingredients) ? payload.ingredients.filter((ing) => ing && typeof ing === 'object' && String((ing as { id?: string }).id || '').trim() && String((ing as { name?: string }).name || '').trim()) as Array<{ id: string; name: string }> : [], active: typeof payload.active === 'boolean' ? payload.active : true, priceDeltaBySize: payload.priceDeltaBySize || null, extraPrice: typeof payload.extraPrice === 'number' ? payload.extraPrice : null, flavorType: payload.flavorType === 'Doce' ? 'Doce' : 'Salgado' });
+          const payload = docSnap.data() as PizzaFlavor & { isActive?: boolean; category?: string };
+          const normalizedActive = typeof payload.active === 'boolean'
+            ? payload.active
+            : (typeof payload.isActive === 'boolean' ? payload.isActive : true);
+          items.push({
+            ...payload,
+            id: docSnap.id,
+            category: payload.category || (payload.flavorType === 'Doce' ? 'doce' : 'salgada'),
+            tags: Array.isArray(payload.tags) ? payload.tags : [],
+            ingredients: Array.isArray(payload.ingredients)
+              ? payload.ingredients.filter((ing) => ing && typeof ing === 'object' && String((ing as { id?: string }).id || '').trim() && String((ing as { name?: string }).name || '').trim()) as Array<{ id: string; name: string }>
+              : [],
+            active: normalizedActive,
+            isActive: normalizedActive,
+            priceDeltaBySize: payload.priceDeltaBySize || null,
+            extraPrice: typeof payload.extraPrice === 'number' ? payload.extraPrice : null,
+            flavorType: payload.flavorType === 'Doce' ? 'Doce' : 'Salgado'
+          });
         });
         setLocal(localKey, items);
         return items;
@@ -877,7 +893,21 @@ export const dbPizzaFlavors = {
   },
   save: async (item: PizzaFlavor): Promise<void> => {
     const localKey = 'platform_pizza_flavors_v1';
-    const sanitized = sanitizeData({ ...item, tags: item.tags || [], ingredients: item.ingredients || [], active: item.active !== false, priceDeltaBySize: item.priceDeltaBySize || null, extraPrice: typeof item.extraPrice === 'number' ? item.extraPrice : null, flavorType: item.flavorType === 'Doce' ? 'Doce' : 'Salgado' });
+    const active = item.active !== false;
+    const now = new Date().toISOString();
+    const sanitized = sanitizeData({
+      ...item,
+      category: item.category || (item.flavorType === 'Doce' ? 'doce' : 'salgada'),
+      tags: item.tags || [],
+      ingredients: item.ingredients || [],
+      active,
+      isActive: active,
+      createdAt: item.createdAt || now,
+      updatedAt: now,
+      priceDeltaBySize: item.priceDeltaBySize || null,
+      extraPrice: typeof item.extraPrice === 'number' ? item.extraPrice : null,
+      flavorType: item.flavorType === 'Doce' ? 'Doce' : 'Salgado'
+    });
 
     if (db) {
       try {
@@ -893,6 +923,18 @@ export const dbPizzaFlavors = {
       ? current.map((i) => (i.id === sanitized.id ? sanitized : i))
       : [sanitized, ...current];
     setLocal(localKey, updated);
+  },
+  createFlavor: async (item: PizzaFlavor): Promise<void> => {
+    await dbPizzaFlavors.save(item);
+  },
+  updateFlavor: async (item: PizzaFlavor): Promise<void> => {
+    await dbPizzaFlavors.save(item);
+  },
+  toggleFlavorStatus: async (id: string, isActive: boolean): Promise<void> => {
+    const current = await dbPizzaFlavors.getAll();
+    const target = current.find((flavor) => flavor.id === id);
+    if (!target) return;
+    await dbPizzaFlavors.save({ ...target, active: isActive, isActive, updatedAt: new Date().toISOString() });
   },
   delete: async (id: string): Promise<void> => {
     const localKey = 'platform_pizza_flavors_v1';
