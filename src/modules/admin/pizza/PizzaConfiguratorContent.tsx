@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Check, Plus, Search, Trash2, X } from 'lucide-react';
-import { MenuItem, PizzaFlavor, PizzaPricingStrategy, PizzaSizeOption } from '../types';
-import { dbMenu, dbPizzaFlavors } from '../services/dbService';
+import { Check, Plus, Search, X } from 'lucide-react';
+import { MenuItem, PizzaFlavor, PizzaPricingStrategy, PizzaTypeConfig } from '../types';
+import { dbMenu, dbPizzaFlavors, dbPizzaTypes } from '../services/dbService';
 import { uploadImageToCloudinary } from '../services/cloudinaryUpload';
 
 interface Props {
@@ -22,15 +22,6 @@ function removeUndefinedDeep<T>(value: T): T {
   return value;
 }
 
-const defaultSize = (): PizzaSizeOption => ({
-  id: `SIZE-${Date.now()}`,
-  label: 'Média',
-  basePrice: 0,
-  maxFlavors: 2,
-  slices: null
-});
-
-const MAX_FLAVOR_OPTIONS = [1, 2, 3, 4] as const;
 const PIZZA_CATEGORY = 'Pizzas';
 const PIZZA_TYPES = ['Pizza Pequena', 'Pizza Média', 'Pizza Grande', 'Pizza Gigante'] as const;
 type PizzaTypeOption = typeof PIZZA_TYPES[number];
@@ -55,15 +46,16 @@ const EMPTY_QUICK_FLAVOR_DRAFT: QuickFlavorDraft = {
 
 const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _categories, onSaved, onDirtyChange }) => {
   const [isSaving, setIsSaving] = useState(false);
-  const [pizzaType, setPizzaType] = useState<PizzaTypeOption>('Pizza Média');
   const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [imagePublicId, setImagePublicId] = useState('');
-  const [sizes, setSizes] = useState<PizzaSizeOption[]>([defaultSize()]);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [imageUploadError, setImageUploadError] = useState<string | null>(null);
   const [localImagePreview, setLocalImagePreview] = useState('');
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+
+  const [pizzaTypes, setPizzaTypes] = useState<PizzaTypeConfig[]>([]);
+  const [selectedPizzaTypeId, setSelectedPizzaTypeId] = useState('');
 
   const [pizzaFlavors, setPizzaFlavors] = useState<PizzaFlavor[]>([]);
   const [selectedFlavorIds, setSelectedFlavorIds] = useState<string[]>([]);
@@ -81,49 +73,78 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
   const [isUploadingQuickFlavorImage, setIsUploadingQuickFlavorImage] = useState(false);
   const [initialSnapshot, setInitialSnapshot] = useState('');
 
+  const selectedPizzaType = useMemo(
+    () => pizzaTypes.find((type) => type.id === selectedPizzaTypeId) || null,
+    [pizzaTypes, selectedPizzaTypeId]
+  );
+
   const loadFlavors = async () => {
     const data = await dbPizzaFlavors.getAll();
     setPizzaFlavors(data);
   };
 
   useEffect(() => {
-    const existingSizes = pizzaBase?.sizes?.length ? pizzaBase.sizes : [defaultSize()];
-    const initialMaxFlavors = Math.max(1, Math.min(4, existingSizes[0]?.maxFlavors || 2));
-    const normalizedSizes = existingSizes.map((size) => ({ ...size, maxFlavors: Math.max(1, Math.min(4, size.maxFlavors || initialMaxFlavors)), slices: size.slices ?? null }));
+    const bootstrap = async () => {
+      const [typesData, flavorsData] = await Promise.all([
+        dbPizzaTypes.listPizzaTypes(),
+        dbPizzaFlavors.getAll()
+      ]);
 
-    const snapshot = {
-      pizzaType: (pizzaBase?.pizzaType && PIZZA_TYPES.includes(pizzaBase.pizzaType as PizzaTypeOption) ? pizzaBase.pizzaType : (PIZZA_TYPES.includes((pizzaBase?.name || '') as PizzaTypeOption) ? pizzaBase?.name : 'Pizza Média')) as PizzaTypeOption,
-      category: PIZZA_CATEGORY,
-      description: pizzaBase?.description || '',
-      imageUrl: pizzaBase?.imageUrl || '',
-      imagePublicId: pizzaBase?.imagePublicId || '',
-      sizes: normalizedSizes,
-      allowedFlavorIds: pizzaBase?.allowedFlavorIds || []
+      const validTypes = typesData.filter((type): type is PizzaTypeConfig =>
+        PIZZA_TYPES.includes(type.typeName as PizzaTypeOption)
+      );
+
+      const legacySize = pizzaBase?.sizes?.[0];
+      const legacyTypeName = (pizzaBase?.pizzaType || pizzaBase?.name || '') as PizzaTypeOption;
+      const fallbackTypeName: PizzaTypeOption = PIZZA_TYPES.includes(legacyTypeName) ? legacyTypeName : 'Pizza Média';
+      const targetType = validTypes.find((type) => type.typeName === fallbackTypeName) || validTypes[0];
+
+      const adjustedTypes = validTypes.map((type) => {
+        if (!targetType || type.id !== targetType.id || !legacySize) return type;
+        return {
+          ...type,
+          basePrice: Number(legacySize.basePrice || type.basePrice || 0),
+          slices: Number(legacySize.slices || type.slices || 1),
+          maxFlavors: Math.max(1, Math.min(4, Number(legacySize.maxFlavors || type.maxFlavors || 1)))
+        };
+      });
+
+      setPizzaTypes(adjustedTypes);
+      setPizzaFlavors(flavorsData);
+      setSelectedPizzaTypeId(targetType?.id || adjustedTypes[0]?.id || '');
+      setDescription(pizzaBase?.description || '');
+      setImageUrl(pizzaBase?.imageUrl || '');
+      setImagePublicId(pizzaBase?.imagePublicId || '');
+      setSelectedFlavorIds(pizzaBase?.allowedFlavorIds || []);
+
+      const snapshot = {
+        pizzaTypeId: targetType?.id || adjustedTypes[0]?.id || '',
+        pizzaTypes: adjustedTypes.map((type) => ({ id: type.id, typeName: type.typeName, basePrice: type.basePrice, slices: type.slices, maxFlavors: type.maxFlavors, isActive: type.isActive })),
+        category: PIZZA_CATEGORY,
+        description: pizzaBase?.description || '',
+        imageUrl: pizzaBase?.imageUrl || '',
+        imagePublicId: pizzaBase?.imagePublicId || '',
+        allowedFlavorIds: pizzaBase?.allowedFlavorIds || []
+      };
+      setInitialSnapshot(JSON.stringify(snapshot));
     };
 
-    setPizzaType(snapshot.pizzaType);
-    setDescription(snapshot.description);
-    setImageUrl(snapshot.imageUrl);
-    setImagePublicId(snapshot.imagePublicId);
-    setSizes(snapshot.sizes);
-    setSelectedFlavorIds(snapshot.allowedFlavorIds);
-    setInitialSnapshot(JSON.stringify(snapshot));
-    loadFlavors();
+    bootstrap();
   }, [pizzaBase]);
 
   useEffect(() => {
     if (!initialSnapshot) return;
     const snapshot = JSON.stringify({
-      pizzaType,
+      pizzaTypeId: selectedPizzaTypeId,
+      pizzaTypes: pizzaTypes.map((type) => ({ id: type.id, typeName: type.typeName, basePrice: type.basePrice, slices: type.slices, maxFlavors: type.maxFlavors, isActive: type.isActive })),
       category: PIZZA_CATEGORY,
       description,
       imageUrl,
       imagePublicId,
-      sizes,
       allowedFlavorIds: selectedFlavorIds
     });
     onDirtyChange?.(snapshot !== initialSnapshot);
-  }, [pizzaType, description, imageUrl, imagePublicId, sizes, selectedFlavorIds, initialSnapshot, onDirtyChange]);
+  }, [selectedPizzaTypeId, pizzaTypes, description, imageUrl, imagePublicId, selectedFlavorIds, initialSnapshot, onDirtyChange]);
 
   const handleImageFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -153,25 +174,23 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
     setQuickFlavorImageUploadError(null);
   };
 
-  const canSavePizza = Boolean(pizzaType) && sizes.length > 0 && sizes.every((size) => size.label.trim() && size.basePrice >= 0);
-
-  const addSize = () => {
-    setSizes((prev) => [...prev, defaultSize()]);
-  };
-
-  const updateSize = (index: number, field: 'label' | 'basePrice' | 'slices' | 'maxFlavors', value: string) => {
-    setSizes((prev) => prev.map((size, i) => {
-      if (i !== index) return size;
-      if (field === 'basePrice') return { ...size, basePrice: Math.max(0, Number(value) || 0) };
-      if (field === 'maxFlavors') return { ...size, maxFlavors: Math.max(1, Math.min(4, Number(value) || 1)) };
-      if (field === 'slices') return { ...size, slices: value ? Math.max(1, Number(value) || 1) : null };
-      return { ...size, label: value };
+  const updateSelectedPizzaType = (field: 'basePrice' | 'slices' | 'maxFlavors', value: string) => {
+    setPizzaTypes((prev) => prev.map((type) => {
+      if (type.id !== selectedPizzaTypeId) return type;
+      if (field === 'basePrice') return { ...type, basePrice: Math.max(0, Number(value) || 0) };
+      if (field === 'slices') return { ...type, slices: Math.max(1, Number(value) || 1) };
+      return { ...type, maxFlavors: Math.max(1, Math.min(4, Number(value) || 1)) };
     }));
   };
 
-  const removeSize = (index: number) => {
-    setSizes((prev) => prev.filter((_, i) => i !== index));
-  };
+  const canSavePizza = Boolean(
+    selectedPizzaType
+    && selectedPizzaType.typeName
+    && Number.isFinite(selectedPizzaType.basePrice)
+    && selectedPizzaType.basePrice >= 0
+    && selectedPizzaType.slices >= 1
+    && selectedPizzaType.maxFlavors >= 1
+  );
 
   const filteredFlavors = useMemo(() => {
     const normalizedQuery = flavorQuery.trim().toLowerCase();
@@ -212,7 +231,6 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
       ingredients: prev.ingredients.map((ingredient, i) => (i === index ? value : ingredient))
     }));
   };
-
 
   const toDraftFromFlavor = (flavor: PizzaFlavor): QuickFlavorDraft => ({
     name: flavor.name || '',
@@ -330,8 +348,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
   };
 
   const handleSavePizza = async () => {
-    if (isUploadingImage) return;
-    if (!pizzaType || !canSavePizza) return;
+    if (isUploadingImage || !selectedPizzaType || !canSavePizza) return;
 
     setIsSaving(true);
     try {
@@ -353,12 +370,15 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
         }
       }
 
+      await dbPizzaTypes.updatePizzaType({ ...selectedPizzaType, updatedAt: new Date().toISOString() });
+
       const payload: MenuItem = removeUndefinedDeep({
         id: pizzaBase?.id || `pizza-${Date.now()}`,
         type: 'pizza',
-        name: pizzaType,
+        name: selectedPizzaType.typeName,
+        pizzaType: selectedPizzaType.typeName,
         category: PIZZA_CATEGORY,
-        price: sizes[0]?.basePrice || 0,
+        price: selectedPizzaType.basePrice,
         description,
         imageUrl: resolvedImageUrl,
         imagePublicId: resolvedImagePublicId || undefined,
@@ -370,14 +390,15 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
         extras: [],
         pricingStrategy: 'fixedBySize' as PizzaPricingStrategy,
         allowedFlavorIds: selectedFlavorIds,
-        pizzaType,
-        sizes: sizes.map((size) => ({
-          id: size.id || `size-${Date.now()}`,
-          label: size.label || 'Tamanho',
-          basePrice: Number(size.basePrice || 0),
-          maxFlavors: Math.max(1, Math.min(4, Number(size.maxFlavors || 1))),
-          slices: size.slices ?? null
-        }))
+        sizes: [
+          {
+            id: selectedPizzaType.id,
+            label: selectedPizzaType.typeName,
+            basePrice: Number(selectedPizzaType.basePrice || 0),
+            maxFlavors: Math.max(1, Math.min(4, Number(selectedPizzaType.maxFlavors || 1))),
+            slices: Math.max(1, Number(selectedPizzaType.slices || 1))
+          }
+        ]
       });
 
       await dbMenu.save(payload);
@@ -393,9 +414,9 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
         <section className="space-y-3">
           <h3 className="text-sm font-black">Informações básicas</h3>
           <div className="grid sm:grid-cols-2 gap-2">
-            <select value={pizzaType} onChange={(e) => setPizzaType(e.target.value as PizzaTypeOption)} className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700 font-semibold">
-              {PIZZA_TYPES.map((type) => (
-                <option key={type} value={type}>{type}</option>
+            <select value={selectedPizzaTypeId} onChange={(e) => setSelectedPizzaTypeId(e.target.value)} className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700 font-semibold">
+              {pizzaTypes.map((type) => (
+                <option key={type.id} value={type.id}>{type.typeName}</option>
               ))}
             </select>
             <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
@@ -406,53 +427,15 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
               {selectedImageFile && <span className="text-[11px] text-stone-500 font-bold truncate max-w-[180px]">{selectedImageFile.name}</span>}
               {isUploadingImage && <span className="text-[11px] text-orange-500 font-bold">Enviando imagem...</span>}
             </div>
-            {imageUploadError && <p className="text-[11px] text-red-500">{imageUploadError}</p>}
-            {(localImagePreview || imageUrl) && <img src={localImagePreview || imageUrl} alt="Prévia" className="w-20 h-20 rounded-xl object-cover border border-stone-200" />}
-          </div>
-        </section>
-
-        <section className="space-y-3">
-          <h3 className="text-sm font-black">Tamanhos da pizza</h3>
-          {sizes.map((size, index) => (
-            <div key={`${size.id}-${index}`} className="rounded-2xl border border-stone-200 dark:border-stone-700 p-4 space-y-4 bg-white dark:bg-stone-900">
-              <div className="flex items-center justify-between">
-                <p className="text-[10px] font-black uppercase tracking-[0.15em] text-stone-400">Tamanho {index + 1}</p>
-                <button onClick={() => removeSize(index)} className="p-2 rounded-lg border border-red-200 text-red-500 flex items-center justify-center" title="Remover tamanho">
-                  <Trash2 size={14} />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-stone-500">Nome do tamanho</label>
-                  <input value={size.label} onChange={(e) => updateSize(index, 'label', e.target.value)} placeholder="Ex: Grande" className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700" />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-stone-500">Preço base</label>
-                  <input type="number" min={0} step="0.01" value={size.basePrice} onChange={(e) => updateSize(index, 'basePrice', e.target.value)} className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700" />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-stone-500">Fatias</label>
-                  <input type="number" min={1} value={size.slices ?? ''} onChange={(e) => updateSize(index, 'slices', e.target.value)} placeholder="Opcional" className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700" />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-stone-500">Máximo de sabores</label>
-                  <select value={size.maxFlavors} onChange={(e) => updateSize(index, 'maxFlavors', e.target.value)} className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700">
-                    {MAX_FLAVOR_OPTIONS.map((option) => (
-                      <option key={option} value={option}>{option} {option === 1 ? 'sabor' : 'sabores'}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:col-span-2">
+              <input type="number" min={0} step="0.01" value={selectedPizzaType?.basePrice ?? 0} onChange={(e) => updateSelectedPizzaType('basePrice', e.target.value)} placeholder="Preço base" className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700" />
+              <input type="number" min={1} value={selectedPizzaType?.slices ?? 1} onChange={(e) => updateSelectedPizzaType('slices', e.target.value)} placeholder="Fatias" className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700" />
+              <input type="number" min={1} max={4} value={selectedPizzaType?.maxFlavors ?? 1} onChange={(e) => updateSelectedPizzaType('maxFlavors', e.target.value)} placeholder="Máx. sabores" className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700" />
             </div>
-          ))}
-
-          <button onClick={addSize} className="px-4 py-2 rounded-xl border border-dashed border-stone-300 text-xs font-black uppercase text-stone-500 hover:border-orange-500 hover:text-orange-500 transition-all">
-            + Adicionar tamanho
-          </button>
+            {imageUploadError && <p className="text-[11px] text-red-500 sm:col-span-2">{imageUploadError}</p>}
+            {(localImagePreview || imageUrl) && <img src={localImagePreview || imageUrl} alt="Prévia" className="w-20 h-20 rounded-xl object-cover border border-stone-200 sm:col-span-2" />}
+          </div>
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Descrição da pizza" className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700" />
         </section>
 
         <section className="space-y-3">
@@ -562,24 +545,24 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
                 return (
                   <div key={flavor.id} className={`rounded-2xl border p-3 text-left transition-all ${isSelected ? 'border-orange-500 bg-orange-50 dark:bg-orange-500/10' : 'border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900'} ${isInactive ? 'opacity-70' : ''}`}>
                     <button onClick={() => toggleFlavorSelection(flavor.id)} disabled={isInactive} className="w-full text-left disabled:cursor-not-allowed">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="w-11 h-11 rounded-xl overflow-hidden border border-stone-200 dark:border-stone-700 bg-stone-100 dark:bg-stone-800 shrink-0">
-                        {flavor.imageUrl ? (
-                          <img src={flavor.imageUrl} alt={flavor.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-[9px] font-black uppercase text-stone-400">Sem foto</div>
-                        )}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="w-11 h-11 rounded-xl overflow-hidden border border-stone-200 dark:border-stone-700 bg-stone-100 dark:bg-stone-800 shrink-0">
+                          {flavor.imageUrl ? (
+                            <img src={flavor.imageUrl} alt={flavor.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-[9px] font-black uppercase text-stone-400">Sem foto</div>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-black text-stone-800 dark:text-stone-100 truncate">{flavor.name}</p>
+                          <p className="text-[11px] text-stone-500">{typeLabel} {typeof flavor.extraPrice === 'number' ? `• +R$ ${flavor.extraPrice.toFixed(2)}` : ''}</p>
+                          <p className="text-[11px] text-stone-400 truncate">{ingredientPreview || 'Sem ingredientes cadastrados'}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {isInactive && <span className="text-[10px] font-black uppercase text-red-500">Inativo</span>}
+                          {isSelected && <Check size={14} className="text-orange-500" />}
+                        </div>
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-black text-stone-800 dark:text-stone-100 truncate">{flavor.name}</p>
-                        <p className="text-[11px] text-stone-500">{typeLabel} {typeof flavor.extraPrice === 'number' ? `• +R$ ${flavor.extraPrice.toFixed(2)}` : ''}</p>
-                        <p className="text-[11px] text-stone-400 truncate">{ingredientPreview || 'Sem ingredientes cadastrados'}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {isInactive && <span className="text-[10px] font-black uppercase text-red-500">Inativo</span>}
-                        {isSelected && <Check size={14} className="text-orange-500" />}
-                      </div>
-                    </div>
                     </button>
                     <div className="mt-3 flex items-center justify-end gap-2">
                       <button type="button" onClick={() => handleEditFlavor(flavor)} className="px-2.5 py-1.5 rounded-lg border border-stone-200 dark:border-stone-700 text-[10px] font-black uppercase text-stone-500">Editar</button>

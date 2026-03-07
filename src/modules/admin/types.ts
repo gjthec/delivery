@@ -25,6 +25,18 @@ export interface Ingredient {
   allergens?: string[] | null;
 }
 
+
+export interface PizzaTypeConfig {
+  id: string;
+  typeName: 'Pizza Pequena' | 'Pizza Média' | 'Pizza Grande' | 'Pizza Gigante';
+  basePrice: number;
+  slices: number;
+  maxFlavors: number;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface PizzaFlavor {
   id: string;
   name: string;
