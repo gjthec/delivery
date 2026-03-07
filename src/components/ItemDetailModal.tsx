@@ -186,24 +186,25 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
     <div className={`fixed inset-0 z-[200] flex items-end justify-center transition-all duration-500 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
       <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={onClose} />
       <div className={`relative w-full max-w-2xl bg-white dark:bg-zinc-950 rounded-t-[3.5rem] shadow-2xl transition-all duration-500 transform flex flex-col overflow-hidden max-h-[calc(100dvh-0.5rem)] md:max-h-[calc(100dvh-1.5rem)] ${isOpen ? 'translate-y-0' : 'translate-y-full'}`}>
-        <div className="relative h-36 sm:h-40 md:h-44 shrink-0 overflow-hidden">
-          <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover saturate-90 brightness-90" />
-          <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/75 via-zinc-950/30 to-black/20" />
-          <button onClick={onClose} className="absolute top-5 right-5 w-11 h-11 flex items-center justify-center rounded-2xl bg-black/25 border border-white/20 text-white"><X size={24} /></button>
-        </div>
+        <button onClick={onClose} className="absolute top-5 right-5 z-20 w-11 h-11 flex items-center justify-center rounded-2xl bg-black/35 border border-white/20 text-white"><X size={24} /></button>
 
-        <div className="shrink-0 px-6 md:px-8 py-4 md:py-5 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
-          <div className="flex justify-between items-start gap-4">
-            <h2 className="text-2xl md:text-3xl font-black tracking-tight leading-tight flex-1 text-zinc-900 dark:text-zinc-50">{item.name}</h2>
-            <p className="text-xl md:text-2xl font-black text-orange-600 shrink-0">R$ {(isPizza ? pizzaUnitPrice : item.price).toFixed(2)}</p>
+        <div className="flex-1 overflow-y-auto overscroll-y-contain hide-scrollbar modal-scrollbar">
+          <div className="relative h-32 sm:h-36 md:h-40 overflow-hidden">
+            <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover saturate-[0.85] brightness-[0.82]" />
+            <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/85 via-zinc-950/45 to-black/25" />
           </div>
-          <p className="text-zinc-500 dark:text-zinc-400 font-medium text-sm mt-2">{item.description}</p>
-        </div>
 
-        <div className="flex-1 overflow-y-auto overscroll-y-contain px-6 md:px-8 py-5 md:py-6 space-y-6 pb-8 md:pb-10 hide-scrollbar modal-scrollbar">
+          <div className="px-6 md:px-8 py-4 md:py-5 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
+            <div className="flex justify-between items-start gap-4">
+              <h2 className="text-2xl md:text-3xl font-black tracking-tight leading-tight flex-1 text-zinc-900 dark:text-zinc-50">{item.name}</h2>
+              <p className="text-xl md:text-2xl font-black text-orange-600 shrink-0">R$ {(isPizza ? pizzaUnitPrice : item.price).toFixed(2)}</p>
+            </div>
+            <p className="text-zinc-500 dark:text-zinc-400 font-medium text-sm mt-2">{item.description}</p>
+          </div>
 
-          {isPizza && (
-            <>
+          <div className="px-6 md:px-8 py-5 md:py-6 space-y-6 pb-8 md:pb-10">
+            {isPizza && (
+              <>
               <div>
                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400 mb-3">Tamanho</h3>
                 <div className="grid grid-cols-2 gap-3">
@@ -300,12 +301,13 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
               </div>
 
               {pizzaWarning && <p className="text-xs text-orange-600 font-bold">{pizzaWarning}</p>}
-            </>
-          )}
+              </>
+            )}
 
-          {!isPizza && (
-            <textarea value={observations} onChange={(e) => setObservations(e.target.value)} placeholder="Observações" className="w-full bg-zinc-50 dark:bg-zinc-900 rounded-2xl p-4 text-sm" />
-          )}
+            {!isPizza && (
+              <textarea value={observations} onChange={(e) => setObservations(e.target.value)} placeholder="Observações" className="w-full bg-zinc-50 dark:bg-zinc-900 rounded-2xl p-4 text-sm" />
+            )}
+          </div>
         </div>
 
         <div className="shrink-0 p-4 md:p-6 pb-[max(1rem,env(safe-area-inset-bottom))] bg-white/95 dark:bg-zinc-950/95 border-t border-zinc-100 dark:border-zinc-800 z-50 flex items-center gap-3 md:gap-4 backdrop-blur supports-[backdrop-filter]:bg-white/80 dark:supports-[backdrop-filter]:bg-zinc-950/80">
