@@ -1530,7 +1530,7 @@ const MenuManager: React.FC = () => {
                       </div>
                   </div>
 
-                  <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6 lg:gap-8 h-full">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 h-full">
                       {renderGlobalList('category', categories, List, 'Categorias', 'Nova Categoria')}
                       {renderGlobalList('tag', globalTags, Tag, 'Selos e Tags', 'Novo Selo/Tag')}
                       {renderGlobalList('ingredient', globalIngredients, List, 'Ingredientes', 'Novo Ingrediente')}
