@@ -14,6 +14,10 @@ const Configuracoes: React.FC = () => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
+  const sanitizeDecimalInput = (value: string) => value.replace(/[^\d.,]/g, '').replace(',', '.');
+
+  const sanitizeIntegerInput = (value: string) => value.replace(/\D/g, '');
+
   const handleSave = async () => {
     try {
       setStatus('saving');
@@ -36,8 +40,8 @@ const Configuracoes: React.FC = () => {
         <input value={form.companyName || ''} onChange={(e) => handleChange('companyName', e.target.value)} placeholder="Nome da empresa" className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-transparent px-4 py-3" />
         <input value={form.logoUrl || ''} onChange={(e) => handleChange('logoUrl', e.target.value)} placeholder="URL da logo" className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-transparent px-4 py-3" />
         <input value={form.openingHours || ''} onChange={(e) => handleChange('openingHours', e.target.value)} placeholder="Horário de funcionamento" className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-transparent px-4 py-3" />
-        <input type="number" value={form.deliveryFee || 0} onChange={(e) => handleChange('deliveryFee', Number(e.target.value))} placeholder="Taxa de entrega" className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-transparent px-4 py-3" />
-        <input type="number" value={form.averageTimeMinutes || 0} onChange={(e) => handleChange('averageTimeMinutes', Number(e.target.value))} placeholder="Tempo médio estimado (min)" className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-transparent px-4 py-3" />
+        <input type="text" inputMode="decimal" value={form.deliveryFee || 0} onChange={(e) => handleChange('deliveryFee', Number(sanitizeDecimalInput(e.target.value) || 0))} placeholder="Taxa de entrega" className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-transparent px-4 py-3" />
+        <input type="text" inputMode="numeric" value={form.averageTimeMinutes || 0} onChange={(e) => handleChange('averageTimeMinutes', Number(sanitizeIntegerInput(e.target.value) || 0))} placeholder="Tempo médio estimado (min)" className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-transparent px-4 py-3" />
       </div>
 
       <button onClick={handleSave} className="mt-6 bg-orange-500 hover:bg-orange-600 text-white py-3 px-6 rounded-2xl font-bold" disabled={status === 'saving'}>

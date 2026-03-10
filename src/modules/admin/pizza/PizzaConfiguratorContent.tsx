@@ -239,6 +239,10 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
     maximumFractionDigits: 2
   }).format(value);
 
+  const sanitizeIntegerInput = (value: string) => value.replace(/\D/g, '');
+
+  const sanitizeDecimalInput = (value: string) => value.replace(/[^\d.,]/g, '').replace(',', '.');
+
   const handleAddIngredientField = () => {
     setQuickFlavorDraft((prev) => ({ ...prev, ingredients: [...prev.ingredients, ''] }));
   };
@@ -480,13 +484,13 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
                 <label className="space-y-1.5">
                   <span className="text-[11px] font-black uppercase tracking-[0.08em] text-stone-500">Quantidade de fatias</span>
                   <span className="block text-[11px] text-stone-500">Informe em quantas fatias essa pizza será dividida.</span>
-                  <input type="number" min={1} value={selectedPizzaType?.slices ?? 1} onChange={(e) => updateSelectedPizzaType('slices', e.target.value)} placeholder="Ex: 8" className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700" />
+                  <input type="text" inputMode="numeric" value={selectedPizzaType?.slices ?? 1} onChange={(e) => updateSelectedPizzaType('slices', sanitizeIntegerInput(e.target.value))} placeholder="Ex: 8" className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700" />
                 </label>
 
                 <label className="space-y-1.5">
                   <span className="text-[11px] font-black uppercase tracking-[0.08em] text-stone-500">Máximo de sabores</span>
                   <span className="block text-[11px] text-stone-500">Defina quantos sabores o cliente poderá selecionar.</span>
-                  <input type="number" min={1} max={4} value={selectedPizzaType?.maxFlavors ?? 1} onChange={(e) => updateSelectedPizzaType('maxFlavors', e.target.value)} placeholder="Ex: 2" className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700" />
+                  <input type="text" inputMode="numeric" value={selectedPizzaType?.maxFlavors ?? 1} onChange={(e) => updateSelectedPizzaType('maxFlavors', sanitizeIntegerInput(e.target.value))} placeholder="Ex: 2" className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700" />
                 </label>
               </div>
             </div>
@@ -551,7 +555,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
                   )}
                 </div>
 
-                <input type="number" min={0} step="0.01" value={quickFlavorDraft.extraPrice} onChange={(e) => setQuickFlavorDraft((prev) => ({ ...prev, extraPrice: e.target.value }))} placeholder="Preço extra (opcional)" className="w-full bg-white dark:bg-stone-900 py-2.5 px-3 rounded-xl border border-stone-200 dark:border-stone-700 text-sm" />
+                <input type="text" inputMode="decimal" value={quickFlavorDraft.extraPrice} onChange={(e) => setQuickFlavorDraft((prev) => ({ ...prev, extraPrice: sanitizeDecimalInput(e.target.value) }))} placeholder="Preço extra (opcional)" className="w-full bg-white dark:bg-stone-900 py-2.5 px-3 rounded-xl border border-stone-200 dark:border-stone-700 text-sm" />
 
                 <label className="rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-2.5 inline-flex items-center justify-between text-sm text-stone-600 dark:text-stone-300">
                   Ativo
