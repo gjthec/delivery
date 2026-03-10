@@ -85,10 +85,16 @@ function normalizeFlavorIngredients(value: unknown): Array<{ id: string; name: s
 
   return value
     .map((ingredient) => {
+      if (typeof ingredient === 'string') {
+        const name = ingredient.trim();
+        if (!name) return null;
+        return { id: name.toLowerCase().replace(/\s+/g, '-'), name };
+      }
+
       if (!ingredient || typeof ingredient !== 'object') return null;
       const payload = ingredient as Record<string, unknown>;
-      const id = String(payload.id ?? '').trim();
-      const name = String(payload.name ?? '').trim();
+      const name = String(payload.name ?? payload.label ?? '').trim();
+      const id = String(payload.id ?? name.toLowerCase().replace(/\s+/g, '-')).trim();
       if (!id || !name) return null;
       return { id, name };
     })
@@ -121,10 +127,14 @@ export function normalizePizzaFlavor(raw: unknown, fallbackId?: string) {
     name,
     description: payload.description ? String(payload.description) : null,
     imageUrl: payload.imageUrl ? String(payload.imageUrl) : null,
-    active: typeof payload.active === 'boolean' ? payload.active : true,
+    active: typeof payload.active === 'boolean'
+      ? payload.active
+      : (typeof payload.isActive === 'boolean' ? payload.isActive : true),
     tags: toStringArray(payload.tags),
     ingredients: normalizeFlavorIngredients(payload.ingredients),
-    priceDeltaBySize: normalizePriceDeltaBySize(payload.priceDeltaBySize)
+    priceDeltaBySize: normalizePriceDeltaBySize(payload.priceDeltaBySize),
+    extraPrice: toNumber(payload.extraPrice),
+    flavorType: payload.flavorType === 'Doce' ? 'Doce' : 'Salgado'
   };
 }
 

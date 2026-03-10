@@ -56,6 +56,18 @@ const CustomPieTooltip = ({ active, payload }: any) => {
 const Dashboard: React.FC<DashboardProps> = ({ setActiveTab }) => {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
+  const kpiNavigationMap: Record<string, string> = {
+    'Receita Líquida': 'sales-insights',
+    'Pedidos Totais': 'orders',
+    'Clientes Fiéis': 'clientes-fieis',
+    'Satisfação': 'satisfacao'
+  };
+
+  const handleKpiNavigation = (label: string) => {
+    const targetTab = kpiNavigationMap[label];
+    if (targetTab) setActiveTab(targetTab);
+  };
+
   const onPieEnter = (_: any, index: number) => {
     setActiveIndex(index);
   };
@@ -95,7 +107,7 @@ const Dashboard: React.FC<DashboardProps> = ({ setActiveTab }) => {
           { label: 'Clientes Fiéis', value: '842', change: '+5%', icon: Users, color: 'green' },
           { label: 'Satisfação', value: '4.9', change: '+0.1', icon: Star, color: 'yellow' },
         ].map((stat, i) => (
-          <div key={i} className="group relative bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer" onClick={() => stat.label === 'Pedidos Totais' ? setActiveTab('orders') : stat.label === 'Receita Líquida' ? setActiveTab('sales-insights') : null}>
+          <div key={i} className="group relative bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer" onClick={() => handleKpiNavigation(stat.label)}>
             <div className={`absolute top-0 right-0 p-4 opacity-10 text-${stat.color}-500 group-hover:scale-110 transition-transform`}>
               <stat.icon size={64} />
             </div>

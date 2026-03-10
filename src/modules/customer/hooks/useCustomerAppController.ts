@@ -36,6 +36,8 @@ export function useCustomerAppController() {
 
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [pizzaFlavors, setPizzaFlavors] = useState<PizzaFlavor[]>([]);
+  const [isLoadingPizzaFlavors, setIsLoadingPizzaFlavors] = useState(false);
+  const [pizzaFlavorsError, setPizzaFlavorsError] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const [darkMode, setDarkMode] = useState(() => {
@@ -71,9 +73,15 @@ export function useCustomerAppController() {
 
 
   useEffect(() => {
+    setIsLoadingPizzaFlavors(true);
+    setPizzaFlavorsError(null);
     listPizzaFlavors()
       .then((flavors) => setPizzaFlavors(flavors.filter((flavor) => flavor.active)))
-      .catch(() => setPizzaFlavors([]));
+      .catch(() => {
+        setPizzaFlavors([]);
+        setPizzaFlavorsError('Não foi possível carregar os sabores no momento.');
+      })
+      .finally(() => setIsLoadingPizzaFlavors(false));
   }, []);
 
   const filteredItems = useMemo(() => menuItems.filter(item => {
@@ -270,6 +278,8 @@ export function useCustomerAppController() {
     shouldHideFooter,
     getItemCountInCart,
     pizzaFlavors,
+    isLoadingPizzaFlavors,
+    pizzaFlavorsError,
     saveToCart,
     openItemDetails,
     handleEditCartItem,

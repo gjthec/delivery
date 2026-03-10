@@ -25,6 +25,8 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
   const [paymentType, setPaymentType] = useState<PaymentType>('credit');
   const [cardBrand, setCardBrand] = useState<CardBrand>('mastercard');
   const [changeFor, setChangeFor] = useState('');
+
+  const sanitizeDecimalInput = (value: string) => value.replace(/[^\d.,]/g, '').replace(',', '.');
   
   const [couponCode, setCouponCode] = useState('');
   const [isCouponModalOpen, setIsCouponModalOpen] = useState(false);
@@ -683,10 +685,11 @@ const CartDrawer: React.FC<Props> = ({ isOpen, onClose, cartItems, onRemove, onE
                         <div className="relative">
                           <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-sm text-green-600">R$</span>
                           <input 
-                            type="number" 
+                            type="text" 
+                            inputMode="decimal"
                             placeholder="Ex: 100.00" 
                             value={changeFor}
-                            onChange={(e) => setChangeFor(e.target.value)}
+                            onChange={(e) => setChangeFor(sanitizeDecimalInput(e.target.value))}
                             className="w-full bg-white dark:bg-zinc-900 border-2 border-green-500/20 focus:border-green-500/50 rounded-2xl pl-10 pr-4 py-3 text-sm font-black outline-none transition-all"
                           />
                         </div>

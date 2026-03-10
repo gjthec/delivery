@@ -6,6 +6,8 @@ import { computePizzaPrice, getPizzaSize } from '../modules/customer/utils/pizza
 interface Props {
   item: MenuItem | null;
   pizzaFlavors?: PizzaFlavor[];
+  pizzaFlavorsLoading?: boolean;
+  pizzaFlavorsError?: string | null;
   initialData?: {
     removedIngredients: string[];
     selectedExtras: ExtraItem[];
@@ -26,7 +28,7 @@ interface Props {
 
 const PIZZA_COLORS = ['#f97316', '#0ea5e9', '#22c55e', '#a855f7'];
 
-const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData, isOpen, onClose, onAddToCart }) => {
+const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], pizzaFlavorsLoading = false, pizzaFlavorsError = null, initialData, isOpen, onClose, onAddToCart }) => {
   const [quantity, setQuantity] = useState(1);
   const [removedIngredients, setRemovedIngredients] = useState<string[]>([]);
   const [selectedExtras, setSelectedExtras] = useState<ExtraItem[]>([]);
@@ -54,6 +56,13 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
   }, [isOpen, initialData, item]);
 
   useEffect(() => {
+    if (!isOpen || item?.type !== 'pizza') return;
+    if (selectedSizeId) return;
+    const firstSizeId = item.sizes?.[0]?.id;
+    if (firstSizeId) setSelectedSizeId(firstSizeId);
+  }, [isOpen, item, selectedSizeId]);
+
+  useEffect(() => {
     if (!isOpen) return;
 
     const previousOverflow = document.body.style.overflow;
@@ -72,15 +81,15 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
     const allowedFlavorIds = item?.allowedFlavorIds || [];
     return pizzaFlavors
       .filter((flavor) => flavor.active)
-      .filter((flavor) => allowedFlavorIds.length === 0 || allowedFlavorIds.includes(flavor.id));
+      .filter((flavor) => allowedFlavorIds.length === 0 || allowedFlavorIds.includes(flavor.id) || allowedFlavorIds.includes(flavor.name));
   }, [pizzaFlavors, item?.allowedFlavorIds]);
 
   const selectedFlavors = useMemo(() => {
     return segmentFlavorIds
       .slice(0, flavorCountSelected)
-      .map((flavorId) => pizzaFlavors.find((flavor) => flavor.id === flavorId))
+      .map((flavorId) => availablePizzaFlavors.find((flavor) => flavor.id === flavorId))
       .filter((flavor): flavor is PizzaFlavor => Boolean(flavor));
-  }, [segmentFlavorIds, flavorCountSelected, pizzaFlavors]);
+  }, [segmentFlavorIds, flavorCountSelected, availablePizzaFlavors]);
 
   const pizzaUnitPrice = useMemo(() => {
     if (!item || !isPizza || !selectedSizeId || selectedFlavors.length === 0) return item?.price || 0;
@@ -138,7 +147,7 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
   const segments = Array.from({ length: flavorCountSelected }, (_, index) => ({
     index,
     flavorId: segmentFlavorIds[index] || '',
-    flavor: pizzaFlavors.find((flavor) => flavor.id === segmentFlavorIds[index]) || null
+    flavor: availablePizzaFlavors.find((flavor) => flavor.id === segmentFlavorIds[index]) || null
   }));
 
   const pizzaConicStyle = {
@@ -149,6 +158,8 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
 
   const ingredientsSummary = Array.from(new Set(selectedFlavors.flatMap((flavor) => flavor.ingredients.map((ingredient) => ingredient.name))));
   const selectedCount = segmentFlavorIds.slice(0, flavorCountSelected).filter(Boolean).length;
+  const pizzaStep = !selectedSizeId ? 1 : selectedCount < flavorCountSelected ? 2 : 3;
+  const pizzaStepLabels = ['1. Escolha o tamanho', '2. Selecione os sabores', '3. Revise e finalize'];
   const isPizzaReady = Boolean(selectedSizeId)
     && segments.length === flavorCountSelected
     && segments.every((segment) => Boolean(segment.flavorId));
@@ -205,8 +216,21 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
           <div className="px-6 md:px-8 py-5 md:py-6 space-y-6 pb-8 md:pb-10">
             {isPizza && (
               <>
+              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 p-4 bg-zinc-50 dark:bg-zinc-900/70 space-y-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Monte sua pizza em 3 passos</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {pizzaStepLabels.map((label, index) => (
+                    <div key={label} className={`rounded-xl px-3 py-2 border text-[11px] font-bold ${pizzaStep >= index + 1 ? 'border-orange-500 bg-orange-50/60 dark:bg-orange-500/10 text-orange-600' : 'border-zinc-200 dark:border-zinc-700 text-zinc-500'}`}>
+                      {label}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-zinc-500">Agora: <span className="font-black text-zinc-700 dark:text-zinc-200">{pizzaStepLabels[pizzaStep - 1]}</span></p>
+              </div>
+
               <div>
                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400 mb-3">Tamanho</h3>
+                <p className="text-xs text-zinc-500 mb-3">Escolha primeiro o tamanho para liberar a configuração correta de sabores.</p>
                 <div className="grid grid-cols-2 gap-3">
                   {(item.sizes || []).map((size) => (
                     <button key={size.id} onClick={() => handleSizeChange(size.id)} className={`p-4 rounded-2xl border-2 text-left ${selectedSizeId === size.id ? 'border-orange-500 bg-orange-50/40 dark:bg-orange-500/10' : 'border-zinc-200 dark:border-zinc-800'}`}>
@@ -219,6 +243,7 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
 
               <div>
                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400 mb-3">Quantidade de sabores</h3>
+                <p className="text-xs text-zinc-500 mb-3">Defina quantos sabores você quer combinar (máximo de {maxFlavorsAllowed}).</p>
                 <div className="flex gap-2 flex-wrap">
                   {Array.from({ length: maxFlavorsAllowed }, (_, i) => i + 1).map((count) => (
                     <button key={count} onClick={() => handleFlavorCountChange(count)} className={`px-4 py-2 rounded-xl border-2 text-xs font-black ${flavorCountSelected === count ? 'border-orange-500 text-orange-600 bg-orange-50/50' : 'border-zinc-200 dark:border-zinc-800 text-zinc-500'}`}>
@@ -231,12 +256,16 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
               <div className="rounded-3xl border border-zinc-200 dark:border-zinc-800 p-4 space-y-3">
                 <div>
                   <h3 className="text-sm font-black">Escolha os sabores</h3>
-                  <p className="text-xs text-zinc-500">Selecione os sabores da sua pizza.</p>
+                  <p className="text-xs text-zinc-500">Selecione os sabores da sua pizza para montar cada fatia.</p>
                   <p className="text-xs font-bold text-orange-600 mt-1">{selectedCount} de {flavorCountSelected} sabores selecionados</p>
                 </div>
 
-                {availablePizzaFlavors.length === 0 ? (
-                  <p className="text-xs text-zinc-500">Nenhum sabor disponível para esta pizza no momento.</p>
+                {pizzaFlavorsLoading ? (
+                  <p className="text-xs text-zinc-500">Carregando sabores e ingredientes...</p>
+                ) : pizzaFlavorsError ? (
+                  <p className="text-xs text-red-500">{pizzaFlavorsError}</p>
+                ) : availablePizzaFlavors.length === 0 ? (
+                  <p className="text-xs text-zinc-500">Nenhum sabor/ingrediente disponível para esta pizza no momento. Verifique os vínculos da pizza no painel.</p>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {availablePizzaFlavors.map((flavor) => {
@@ -293,6 +322,7 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], initialData
                 <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
                   <p className="text-xs font-black uppercase tracking-widest text-zinc-400">Resumo</p>
                   <p className="text-sm font-bold text-zinc-700 dark:text-zinc-200 mt-1">{selectedSize ? `${selectedSize.label} • ${segments.map((segment) => segment.flavor?.name || '---').join(' | ')}` : 'Selecione o tamanho e os sabores'}</p>
+                  <p className="text-[11px] text-zinc-500 mt-1">Finalize revisando os sabores e depois adicione ao carrinho.</p>
                   <button className="mt-2 text-[11px] text-zinc-500 flex items-center gap-1" onClick={() => setShowIngredientDetails((prev) => !prev)}>
                     Ingredientes consolidados <ChevronDown size={12} className={showIngredientDetails ? 'rotate-180' : ''} />
                   </button>

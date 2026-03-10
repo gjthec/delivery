@@ -174,6 +174,20 @@ const MenuManager: React.FC = () => {
     new Map(values.map(value => [value.trim().toLowerCase(), value.trim()])).values()
   ).filter(Boolean).sort((a, b) => a.localeCompare(b));
 
+
+  const sanitizeDecimalInput = (value: string) => {
+    const sanitized = value.replace(/[^\d.,]/g, '');
+    const lastComma = sanitized.lastIndexOf(',');
+    const lastDot = sanitized.lastIndexOf('.');
+    const separatorIndex = Math.max(lastComma, lastDot);
+    if (separatorIndex === -1) return sanitized.replace(/\D/g, '');
+    const integerPart = sanitized.slice(0, separatorIndex).replace(/\D/g, '');
+    const decimalPart = sanitized.slice(separatorIndex + 1).replace(/\D/g, '').slice(0, 2);
+    return decimalPart ? `${integerPart || '0'}.${decimalPart}` : (integerPart || '0');
+  };
+
+  const sanitizeIntegerInput = (value: string) => value.replace(/\D/g, '');
+
   const loadMenu = async (): Promise<MenuItem[]> => {
     const data = await dbMenu.getAll();
     setMenuItems(data);
@@ -818,11 +832,10 @@ const MenuManager: React.FC = () => {
             <option value="Doce">Doce</option>
           </select>
           <input
-            type="number"
-            min={0}
-            step="0.01"
+            type="text"
+            inputMode="decimal"
             value={flavorDraft.extraPrice}
-            onChange={(e) => setFlavorDraft((prev) => ({ ...prev, extraPrice: e.target.value }))}
+            onChange={(e) => setFlavorDraft((prev) => ({ ...prev, extraPrice: sanitizeDecimalInput(e.target.value) }))}
             placeholder="Preço extra"
             className="bg-white dark:bg-stone-900 px-4 py-3 rounded-xl border border-stone-200 dark:border-stone-700 text-sm font-bold"
           />
@@ -1319,15 +1332,15 @@ const MenuManager: React.FC = () => {
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="space-y-2">
                           <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Preço de venda</label>
-                          <input type="number" value={formData.price} onChange={e => setFormData(p => ({...p, price: e.target.value}))} className="w-full bg-stone-50 dark:bg-stone-800 p-4 rounded-2xl border border-stone-200 dark:border-stone-700 font-black text-orange-600" />
+                          <input type="text" inputMode="decimal" value={formData.price} onChange={e => setFormData(p => ({...p, price: sanitizeDecimalInput(e.target.value)}))} className="w-full bg-stone-50 dark:bg-stone-800 p-4 rounded-2xl border border-stone-200 dark:border-stone-700 font-black text-orange-600" />
                         </div>
                         <div className="space-y-2">
                           <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Custo unitário</label>
-                          <input type="number" value={formData.costPrice} onChange={e => setFormData(p => ({...p, costPrice: e.target.value}))} className="w-full bg-stone-50 dark:bg-stone-800 p-4 rounded-2xl border border-stone-200 dark:border-stone-700 font-bold dark:text-white" placeholder="R$ 0,00" />
+                          <input type="text" inputMode="decimal" value={formData.costPrice} onChange={e => setFormData(p => ({...p, costPrice: sanitizeDecimalInput(e.target.value)}))} className="w-full bg-stone-50 dark:bg-stone-800 p-4 rounded-2xl border border-stone-200 dark:border-stone-700 font-bold dark:text-white" placeholder="R$ 0,00" />
                         </div>
                         <div className="space-y-2">
                           <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Preço promocional ou de antes</label>
-                          <input type="number" value={formData.originalPrice} onChange={e => setFormData(p => ({...p, originalPrice: e.target.value}))} className="w-full bg-stone-50 dark:bg-stone-800 p-4 rounded-2xl border border-stone-200 dark:border-stone-700 font-bold dark:text-white" />
+                          <input type="text" inputMode="decimal" value={formData.originalPrice} onChange={e => setFormData(p => ({...p, originalPrice: sanitizeDecimalInput(e.target.value)}))} className="w-full bg-stone-50 dark:bg-stone-800 p-4 rounded-2xl border border-stone-200 dark:border-stone-700 font-bold dark:text-white" />
                         </div>
                       </div>
                     </div>
@@ -1452,7 +1465,7 @@ const MenuManager: React.FC = () => {
                       </h3>
                       <div className="flex flex-col sm:flex-row gap-2">
                         <input value={newExtra.name} onChange={e => setNewExtra(p => ({...p, name: e.target.value}))} className="flex-[2] min-w-0 bg-white dark:bg-stone-900 px-4 py-2 rounded-xl border border-stone-200 dark:border-stone-700 text-sm font-bold dark:text-white" placeholder="Item" />
-                        <input type="number" value={newExtra.price} onChange={e => setNewExtra(p => ({...p, price: e.target.value}))} className="flex-1 min-w-0 bg-white dark:bg-stone-900 px-4 py-2 rounded-xl border border-stone-200 dark:border-stone-700 text-sm font-bold dark:text-white" placeholder="R$" />
+                        <input type="text" inputMode="decimal" value={newExtra.price} onChange={e => setNewExtra(p => ({...p, price: sanitizeDecimalInput(e.target.value)}))} className="flex-1 min-w-0 bg-white dark:bg-stone-900 px-4 py-2 rounded-xl border border-stone-200 dark:border-stone-700 text-sm font-bold dark:text-white" placeholder="R$" />
                         <button onClick={addExtra} className="p-2 bg-orange-500 text-white rounded-xl shrink-0 flex justify-center items-center"><Plus size={18} /></button>
                       </div>
                       <div className="space-y-2">
@@ -1515,9 +1528,10 @@ const MenuManager: React.FC = () => {
                       </div>
                       <div className="flex gap-2 w-full md:w-auto">
                           <input 
-                              type="number" 
+                              type="text" 
+                              inputMode="decimal"
                               value={deliveryFee} 
-                              onChange={e => setDeliveryFee(e.target.value)}
+                              onChange={e => setDeliveryFee(sanitizeDecimalInput(e.target.value))}
                               className="bg-white dark:bg-stone-900 px-4 py-3 rounded-xl border border-stone-200 dark:border-stone-700 text-lg font-black text-stone-800 dark:text-white outline-none focus:border-orange-500 w-full md:w-32 text-center"
                               placeholder="0.00"
                           />
@@ -1530,7 +1544,7 @@ const MenuManager: React.FC = () => {
                       </div>
                   </div>
 
-                  <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6 lg:gap-8 h-full">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 h-full">
                       {renderGlobalList('category', categories, List, 'Categorias', 'Nova Categoria')}
                       {renderGlobalList('tag', globalTags, Tag, 'Selos e Tags', 'Novo Selo/Tag')}
                       {renderGlobalList('ingredient', globalIngredients, List, 'Ingredientes', 'Novo Ingrediente')}
@@ -1570,9 +1584,10 @@ const MenuManager: React.FC = () => {
                           <div className="flex-1 space-y-1">
                               <label className="text-[10px] font-bold uppercase text-stone-500 ml-2">Desconto (%)</label>
                               <input 
-                                type="number"
+                                type="text"
+                                inputMode="numeric"
                                 value={newCoupon.discount}
-                                onChange={e => setNewCoupon(p => ({ ...p, discount: e.target.value }))}
+                                onChange={e => setNewCoupon(p => ({ ...p, discount: sanitizeIntegerInput(e.target.value) }))}
                                 className="w-full bg-white dark:bg-stone-900 px-4 py-3 rounded-xl border border-stone-200 dark:border-stone-700 font-bold dark:text-white outline-none focus:border-orange-500"
                                 placeholder="%"
                               />
@@ -1580,9 +1595,10 @@ const MenuManager: React.FC = () => {
                           <div className="flex-1 space-y-1">
                               <label className="text-[10px] font-bold uppercase text-stone-500 ml-2">Máx. (R$)</label>
                               <input 
-                                type="number"
+                                type="text"
+                                inputMode="decimal"
                                 value={newCoupon.maxDiscountValue}
-                                onChange={e => setNewCoupon(p => ({ ...p, maxDiscountValue: e.target.value }))}
+                                onChange={e => setNewCoupon(p => ({ ...p, maxDiscountValue: sanitizeDecimalInput(e.target.value) }))}
                                 className="w-full bg-white dark:bg-stone-900 px-4 py-3 rounded-xl border border-stone-200 dark:border-stone-700 font-bold dark:text-white outline-none focus:border-orange-500"
                                 placeholder="Opcional"
                               />
