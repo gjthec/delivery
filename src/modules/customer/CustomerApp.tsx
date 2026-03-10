@@ -17,6 +17,8 @@ const CustomerApp: React.FC = () => {
   const {
     menuItems,
     pizzaFlavors,
+    isLoadingPizzaFlavors,
+    pizzaFlavorsError,
     categories,
     deliveryFee,
     isLoadingData,
@@ -120,6 +122,8 @@ const CustomerApp: React.FC = () => {
         initialData={currentInitialData}
         onClose={() => { setIsDetailModalOpen(false); setEditingCartIndex(null); }}
         pizzaFlavors={pizzaFlavors}
+        pizzaFlavorsLoading={isLoadingPizzaFlavors}
+        pizzaFlavorsError={pizzaFlavorsError}
         onAddToCart={(custom) => {
           if (selectedItem) {
             saveToCart(selectedItem, custom.quantity, custom.removedIngredients, custom.selectedExtras, custom.observations, custom.pizzaConfig);
