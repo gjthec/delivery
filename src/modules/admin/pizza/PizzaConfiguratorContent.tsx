@@ -214,6 +214,31 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
     return Number.isFinite(parsed) ? parsed : null;
   };
 
+  const parseCurrencyInput = (value: string): number => {
+    const sanitized = value.replace(/[^\d.,]/g, '').trim();
+    if (!sanitized) return 0;
+
+    const commaIndex = sanitized.lastIndexOf(',');
+    const dotIndex = sanitized.lastIndexOf('.');
+    const separatorIndex = Math.max(commaIndex, dotIndex);
+
+    if (separatorIndex === -1) {
+      return Number(sanitized.replace(/\D/g, '')) || 0;
+    }
+
+    const integerPart = sanitized.slice(0, separatorIndex).replace(/\D/g, '');
+    const decimalPart = sanitized.slice(separatorIndex + 1).replace(/\D/g, '').slice(0, 2);
+    const normalized = `${integerPart || '0'}.${decimalPart}`;
+    return Number(normalized) || 0;
+  };
+
+  const formatCurrencyBRL = (value: number): string => new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value);
+
   const handleAddIngredientField = () => {
     setQuickFlavorDraft((prev) => ({ ...prev, ingredients: [...prev.ingredients, ''] }));
   };
@@ -449,7 +474,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
                 <label className="space-y-1.5">
                   <span className="text-[11px] font-black uppercase tracking-[0.08em] text-stone-500">Preço base</span>
                   <span className="block text-[11px] text-stone-500">Defina o valor inicial desta pizza.</span>
-                  <input type="number" min={0} step="0.01" value={selectedPizzaType?.basePrice ?? 0} onChange={(e) => updateSelectedPizzaType('basePrice', e.target.value)} placeholder="Ex: 49,90" className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700" />
+                  <input type="text" inputMode="decimal" value={formatCurrencyBRL(selectedPizzaType?.basePrice ?? 0)} onChange={(e) => updateSelectedPizzaType('basePrice', String(parseCurrencyInput(e.target.value)))} placeholder="R$ 0,00" className="w-full bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-200 dark:border-stone-700" />
                 </label>
 
                 <label className="space-y-1.5">
