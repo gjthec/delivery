@@ -28,7 +28,7 @@ export interface Ingredient {
 
 export interface PizzaTypeConfig {
   id: string;
-  typeName: 'Pizza Pequena' | 'Pizza Média' | 'Pizza Grande' | 'Pizza Gigante';
+  typeName: string;
   basePrice: number;
   slices: number;
   maxFlavors: number;
@@ -75,7 +75,7 @@ export interface MenuItem {
   pricingStrategy?: PizzaPricingStrategy;
   sizes?: PizzaSizeOption[];
   allowedFlavorIds?: string[];
-  pizzaType?: 'Pizza Pequena' | 'Pizza Média' | 'Pizza Grande' | 'Pizza Gigante';
+  pizzaType?: string;
 }
 
 export interface Category {
