@@ -400,10 +400,32 @@ const MenuManager: React.FC = () => {
   };
 
   const selectedPizzaDetails = pizzaDetailsData.selectedPizza || detailsItem;
-  const selectedSizes = selectedPizzaDetails?.sizes || [];
+  const selectedSizes = (((selectedPizzaDetails?.sizes || []) as PizzaSizeOption[]) || []).map((size, index) => ({
+    ...size,
+    id: size?.id || `size-${index}`,
+    label: size?.label || `Tamanho ${index + 1}`,
+    maxFlavors: Number.isFinite(Number(size?.maxFlavors)) ? Number(size.maxFlavors) : 0,
+    slices: typeof size?.slices === 'number' ? size.slices : null
+  }));
   const selectedExtras = ((selectedPizzaDetails as MenuItem & { extras?: PizzaExtraEntry[] } | null)?.extras || []);
-  const flavorExtras = selectedExtras.filter((extra) => extra && extra.name && extra.type === 'pizza');
-  const borderExtras = selectedExtras.filter((extra) => extra && extra.name && extra.type === 'borda');
+
+  const normalizeExtrasByName = (extras: PizzaExtraEntry[]) => {
+    const extrasByName = new Map<string, PizzaExtraEntry>();
+    extras.forEach((extra) => {
+      if (!extra?.name) return;
+      const key = extra.name.trim().toLowerCase();
+      const prev = extrasByName.get(key);
+      const currentHasBySize = Boolean((extra as PizzaExtraEntry & Record<string, any>).priceBySize && Object.keys((extra as PizzaExtraEntry & Record<string, any>).priceBySize).length > 0);
+      const prevHasBySize = Boolean(prev && (prev as PizzaExtraEntry & Record<string, any>).priceBySize && Object.keys((prev as PizzaExtraEntry & Record<string, any>).priceBySize).length > 0);
+      if (!prev || (!prevHasBySize && currentHasBySize)) {
+        extrasByName.set(key, extra);
+      }
+    });
+    return Array.from(extrasByName.values());
+  };
+
+  const flavorExtras = normalizeExtrasByName(selectedExtras.filter((extra) => extra && extra.name && extra.type === 'pizza'));
+  const borderExtras = normalizeExtrasByName(selectedExtras.filter((extra) => extra && extra.name && extra.type === 'borda'));
   const activeLabel = (selectedPizzaDetails as MenuItem & { active?: boolean } | null)?.active !== false ? 'Ativo' : 'Inativo';
 
   const resolveExtraPriceBySize = (extra: PizzaExtraEntry & Record<string, any>, size: PizzaSizeOption) => {
@@ -1920,8 +1942,8 @@ const MenuManager: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {flavorExtras.map((extra) => (
-                          <tr key={extra.name} className="border-t border-stone-100 dark:border-stone-800">
+                        {flavorExtras.map((extra, index) => (
+                          <tr key={`${extra.name}-${index}`} className="border-t border-stone-100 dark:border-stone-800">
                             <td className="py-2 font-bold text-stone-700 dark:text-stone-200">{extra.name}</td>
                             {selectedSizes.map((size) => (
                               <td key={`${extra.name}-${size.id}`} className="py-2 text-stone-500">{(() => { const value = resolveExtraPriceBySize(extra as PizzaExtraEntry & Record<string, any>, size); return value === null ? '—' : formatCurrencyBRL(value); })()}</td>
@@ -1940,7 +1962,7 @@ const MenuManager: React.FC = () => {
                   <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4">
                     <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Bordas</h4>
                     <div className="space-y-2">
-                      {borderExtras.map((border) => (
+                      {borderExtras.map((border, index) => (
                         <div key={border.name} className="grid grid-cols-2 gap-2 text-xs bg-stone-50 dark:bg-stone-800/40 rounded-xl px-3 py-2">
                           <span className="font-black text-stone-700 dark:text-stone-200">{border.name}</span>
                           <span className="text-stone-500">{formatCurrencyBRL(Number(border.price || 0))}</span>
@@ -1960,8 +1982,8 @@ const MenuManager: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {borderExtras.map((border) => (
-                          <tr key={border.name} className="border-t border-stone-100 dark:border-stone-800">
+                        {borderExtras.map((border, index) => (
+                          <tr key={`${border.name}-${index}`} className="border-t border-stone-100 dark:border-stone-800">
                             <td className="py-2 font-bold text-stone-700 dark:text-stone-200">{border.name}</td>
                             {selectedSizes.map((size) => (
                               <td key={`${border.name}-${size.id}`} className="py-2 text-stone-500">{(() => { const value = resolveExtraPriceBySize(border as PizzaExtraEntry & Record<string, any>, size); return value === null ? '—' : formatCurrencyBRL(value); })()}</td>
