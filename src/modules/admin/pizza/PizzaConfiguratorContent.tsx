@@ -129,6 +129,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
   const [editingBorderId, setEditingBorderId] = useState<string | null>(null);
 
   const [flavorPrices, setFlavorPrices] = useState<Record<string, Record<string, string>>>({});
+  const [borderPrices, setBorderPrices] = useState<Record<string, Record<string, string>>>({});
   const [initialSnapshot, setInitialSnapshot] = useState('');
 
   const loadFlavors = async () => {
@@ -168,6 +169,15 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
       })).filter((border) => border.name);
       setBorders(initialBorders);
 
+      const initialBorderPrices: Record<string, Record<string, string>> = {};
+      initialBorders.forEach((border) => {
+        initialBorderPrices[border.id] = {};
+        mergedTypes.filter((type) => type.isActive !== false).forEach((size) => {
+          initialBorderPrices[border.id][size.id] = String(border.extraPrice || 0);
+        });
+      });
+      setBorderPrices(initialBorderPrices);
+
       const pricingSnapshot: Record<string, Record<string, string>> = {};
       flavorsData.forEach((flavor) => {
         pricingSnapshot[flavor.id] = {};
@@ -181,7 +191,8 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
         pizzaTypes: mergedTypes,
         allowedFlavorIds: pizzaBase?.allowedFlavorIds || [],
         flavorPrices: pricingSnapshot,
-        borders: initialBorders
+        borders: initialBorders,
+        borderPrices: initialBorderPrices
       });
       setInitialSnapshot(snapshot);
     };
@@ -195,10 +206,11 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
       pizzaTypes,
       allowedFlavorIds: selectedFlavorIds,
       flavorPrices,
-      borders
+      borders,
+      borderPrices
     });
     onDirtyChange?.(snapshot !== initialSnapshot);
-  }, [pizzaTypes, selectedFlavorIds, flavorPrices, borders, initialSnapshot, onDirtyChange]);
+  }, [pizzaTypes, selectedFlavorIds, flavorPrices, borders, borderPrices, initialSnapshot, onDirtyChange]);
 
   const activeSizes = useMemo(() => pizzaTypes.filter((type) => type.isActive !== false), [pizzaTypes]);
 
@@ -427,6 +439,17 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
     setBorders((prev) => prev.map((border) => border.id === borderId ? { ...border, active: false } : border));
   };
 
+
+  const updateBorderPriceCell = (borderId: string, sizeId: string, value: string) => {
+    setBorderPrices((prev) => ({
+      ...prev,
+      [borderId]: {
+        ...(prev[borderId] || {}),
+        [sizeId]: value.replace(/[^\d.,]/g, '')
+      }
+    }));
+  };
+
   const canSavePizza = activeSizes.length > 0 && selectedFlavorIds.length > 0;
 
   const handleSavePizza = async () => {
@@ -471,7 +494,13 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
         size: 'M',
         tags: ['pizza'],
         ingredients: [],
-        extras: borders.filter((border) => border.active).map((border) => ({ type: 'pizza' as const, name: border.name, price: border.extraPrice })),
+        extras: borders.filter((border) => border.active).map((border) => {
+          const prices = activeSizes.map((size) => {
+            const raw = borderPrices[border.id]?.[size.id] || '';
+            return raw.trim() ? parseCurrencyInput(raw) : null;
+          }).filter((value): value is number => typeof value === 'number');
+          return { type: 'pizza' as const, name: border.name, price: prices.length ? Math.min(...prices) : border.extraPrice };
+        }),
         pricingStrategy: 'fixedBySize' as PizzaPricingStrategy,
         allowedFlavorIds: selectedFlavorIds,
         sizes: activeSizes.map((size) => ({
@@ -651,6 +680,49 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
           </div>
         </section>
 
+<section className="rounded-2xl border border-stone-200 dark:border-stone-700 p-4 space-y-3">
+          <div>
+            <h3 className="text-sm font-black">Preço dos sabores por tamanho</h3>
+            <p className="text-xs text-stone-500">Defina o preço por combinação de sabor + tamanho.</p>
+          </div>
+
+          {activeSizes.length === 0 || selectedFlavorIds.length === 0 ? (
+            <p className="text-xs text-stone-500">Cadastre ao menos 1 tamanho ativo e selecione sabores para liberar a tabela dinâmica de preços.</p>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-stone-200 dark:border-stone-700">
+              <table className="min-w-full text-sm">
+                <thead className="bg-stone-50 dark:bg-stone-800">
+                  <tr>
+                    <th className="text-left px-3 py-2 text-[11px] uppercase tracking-[0.08em] text-stone-500">Sabor</th>
+                    {activeSizes.map((size) => (
+                      <th key={size.id} className="text-left px-3 py-2 text-[11px] uppercase tracking-[0.08em] text-stone-500">{size.typeName}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {pizzaFlavors.filter((flavor) => selectedFlavorIds.includes(flavor.id)).map((flavor) => (
+                    <tr key={flavor.id} className="border-t border-stone-200 dark:border-stone-700">
+                      <td className="px-3 py-2 font-semibold">{flavor.name}</td>
+                      {activeSizes.map((size) => {
+                        const rawValue = flavorPrices[flavor.id]?.[size.id] || '';
+                        return (
+                          <td key={`${flavor.id}-${size.id}`} className="px-3 py-2">
+                            <input
+                              value={rawValue ? formatCurrencyBRL(parseCurrencyInput(rawValue)) : ''}
+                              onChange={(e) => updatePriceCell(flavor.id, size.id, e.target.value)}
+                              placeholder="R$ 0,00"
+                              className="w-28 bg-white dark:bg-stone-900 px-3 py-2 rounded-xl border border-stone-200 dark:border-stone-700 text-xs"
+                            />
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
 
         <section className="rounded-2xl border border-stone-200 dark:border-stone-700 p-4 space-y-3">
           <div>
@@ -696,34 +768,34 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
 
         <section className="rounded-2xl border border-stone-200 dark:border-stone-700 p-4 space-y-3">
           <div>
-            <h3 className="text-sm font-black">Preço por tamanho</h3>
-            <p className="text-xs text-stone-500">Defina o preço por combinação de sabor + tamanho. Esta tabela é a fonte principal de preço.</p>
+            <h3 className="text-sm font-black">Preço das bordas por tamanho</h3>
+            <p className="text-xs text-stone-500">Defina o preço extra por combinação de borda + tamanho.</p>
           </div>
 
-          {activeSizes.length === 0 || selectedFlavorIds.length === 0 ? (
-            <p className="text-xs text-stone-500">Cadastre ao menos 1 tamanho ativo e selecione sabores para liberar a tabela dinâmica de preços.</p>
+          {activeSizes.length === 0 || borders.length === 0 ? (
+            <p className="text-xs text-stone-500">Cadastre ao menos 1 tamanho ativo e 1 borda para liberar a tabela dinâmica de preços.</p>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-stone-200 dark:border-stone-700">
               <table className="min-w-full text-sm">
                 <thead className="bg-stone-50 dark:bg-stone-800">
                   <tr>
-                    <th className="text-left px-3 py-2 text-[11px] uppercase tracking-[0.08em] text-stone-500">Sabor</th>
+                    <th className="text-left px-3 py-2 text-[11px] uppercase tracking-[0.08em] text-stone-500">Borda</th>
                     {activeSizes.map((size) => (
                       <th key={size.id} className="text-left px-3 py-2 text-[11px] uppercase tracking-[0.08em] text-stone-500">{size.typeName}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {pizzaFlavors.filter((flavor) => selectedFlavorIds.includes(flavor.id)).map((flavor) => (
-                    <tr key={flavor.id} className="border-t border-stone-200 dark:border-stone-700">
-                      <td className="px-3 py-2 font-semibold">{flavor.name}</td>
+                  {borders.map((border) => (
+                    <tr key={border.id} className="border-t border-stone-200 dark:border-stone-700">
+                      <td className="px-3 py-2 font-semibold">{border.name}</td>
                       {activeSizes.map((size) => {
-                        const rawValue = flavorPrices[flavor.id]?.[size.id] || '';
+                        const rawValue = borderPrices[border.id]?.[size.id] || '';
                         return (
-                          <td key={`${flavor.id}-${size.id}`} className="px-3 py-2">
+                          <td key={`${border.id}-${size.id}`} className="px-3 py-2">
                             <input
                               value={rawValue ? formatCurrencyBRL(parseCurrencyInput(rawValue)) : ''}
-                              onChange={(e) => updatePriceCell(flavor.id, size.id, e.target.value)}
+                              onChange={(e) => updateBorderPriceCell(border.id, size.id, e.target.value)}
                               placeholder="R$ 0,00"
                               className="w-28 bg-white dark:bg-stone-900 px-3 py-2 rounded-xl border border-stone-200 dark:border-stone-700 text-xs"
                             />
@@ -737,6 +809,8 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
             </div>
           )}
         </section>
+
+        
       </div>
 
       <div className="px-6 lg:px-12 py-4 border-t border-stone-100 dark:border-stone-800 flex items-center justify-end bg-white dark:bg-stone-900">
