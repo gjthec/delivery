@@ -129,6 +129,8 @@ const MenuManager: React.FC = () => {
   const [pizzaDetailsLoading, setPizzaDetailsLoading] = useState(false);
   const [pizzaDetailsError, setPizzaDetailsError] = useState<string | null>(null);
   const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
+  const [originalCategory, setOriginalCategory] = useState<string | null>(null);
+  const [originalItemId, setOriginalItemId] = useState<string | null>(null);
 
   const openAlert = (message: string, title: string = 'Atenção') => {
     setAlertModal({ title, message });
@@ -460,11 +462,17 @@ const MenuManager: React.FC = () => {
     }
   };
 
-  const handleEdit = (item: MenuItem) => {
-    if (item.type === 'pizza') {
-      setEditingPizzaBase(item);
+  const handleEdit = async (item: MenuItem) => {
+    const persistedItem = await dbMenu.getById(item.id);
+    const sourceItem = persistedItem || item;
+
+    setOriginalCategory(sourceItem.category || null);
+    setOriginalItemId(sourceItem.id || null);
+
+    if (sourceItem.type === 'pizza') {
+      setEditingPizzaBase(sourceItem);
       setNewItemType('pizza');
-      setEditingId(item.id);
+      setEditingId(sourceItem.id);
       setIsModalOpen(true);
       return;
     }
@@ -472,41 +480,41 @@ const MenuManager: React.FC = () => {
     setEditingPizzaBase(null);
     setNewItemType('normal');
     setFormData({
-      name: item.name,
-      category: item.category,
-      price: item.price.toString(),
-      costPrice: item.costPrice?.toString() || '',
-      originalPrice: item.originalPrice?.toString() || '',
-      description: item.description,
-      imageUrl: item.imageUrl,
-      imagePublicId: item.imagePublicId || '',
-      size: item.size,
-      tags: [...item.tags],
-      ingredients: [...item.ingredients],
-      extras: [...item.extras],
-      type: item.type || 'regular',
-      pricingStrategy: item.pricingStrategy || 'highestFlavor',
-      sizes: item.sizes || []
+      name: sourceItem.name,
+      category: sourceItem.category,
+      price: sourceItem.price.toString(),
+      costPrice: sourceItem.costPrice?.toString() || '',
+      originalPrice: sourceItem.originalPrice?.toString() || '',
+      description: sourceItem.description,
+      imageUrl: sourceItem.imageUrl,
+      imagePublicId: sourceItem.imagePublicId || '',
+      size: sourceItem.size,
+      tags: [...sourceItem.tags],
+      ingredients: [...sourceItem.ingredients],
+      extras: [...sourceItem.extras],
+      type: sourceItem.type || 'regular',
+      pricingStrategy: sourceItem.pricingStrategy || 'highestFlavor',
+      sizes: sourceItem.sizes || []
     });
-    setEditingId(item.id);
-    setLocalImagePreview(item.imageUrl || '');
+    setEditingId(sourceItem.id);
+    setLocalImagePreview(sourceItem.imageUrl || '');
     setImageUploadError(null);
     setNormalBaseline(getNormalSnapshot({
-      name: item.name,
-      category: item.category,
-      price: item.price.toString(),
-      costPrice: item.costPrice?.toString() || '',
-      originalPrice: item.originalPrice?.toString() || '',
-      description: item.description,
-      imageUrl: item.imageUrl,
-      imagePublicId: item.imagePublicId || '',
-      size: item.size,
-      tags: [...item.tags],
-      ingredients: [...item.ingredients],
-      extras: [...item.extras],
-      type: item.type || 'regular',
-      pricingStrategy: item.pricingStrategy || 'highestFlavor',
-      sizes: item.sizes || []
+      name: sourceItem.name,
+      category: sourceItem.category,
+      price: sourceItem.price.toString(),
+      costPrice: sourceItem.costPrice?.toString() || '',
+      originalPrice: sourceItem.originalPrice?.toString() || '',
+      description: sourceItem.description,
+      imageUrl: sourceItem.imageUrl,
+      imagePublicId: sourceItem.imagePublicId || '',
+      size: sourceItem.size,
+      tags: [...sourceItem.tags],
+      ingredients: [...sourceItem.ingredients],
+      extras: [...sourceItem.extras],
+      type: sourceItem.type || 'regular',
+      pricingStrategy: sourceItem.pricingStrategy || 'highestFlavor',
+      sizes: sourceItem.sizes || []
     }));
     setDirtyNormal(false);
     setIsModalOpen(true);
@@ -580,10 +588,22 @@ const MenuManager: React.FC = () => {
       }
     }
 
+    if (editingId && originalCategory && formData.category !== originalCategory) {
+      console.error('[MenuManager] Tentativa bloqueada de alteração de categoria.', { editingId, originalCategory, submitted: formData.category });
+      openAlert('Este campo não pode ser alterado após a criação.');
+      return;
+    }
+
+    if (editingId && originalItemId && editingId !== originalItemId) {
+      console.error('[MenuManager] Tentativa bloqueada de alteração de ID.', { editingId, originalItemId });
+      openAlert('Não foi possível salvar: identificador inválido.');
+      return;
+    }
+
     const payload: MenuItem = {
       id: editingId || `b-${Date.now()}`,
       name: formData.name,
-      category: formData.category,
+      category: editingId && originalCategory ? originalCategory : formData.category,
       price: formData.type === 'pizza' ? (formData.sizes[0]?.basePrice || 0) : parseFloat(formData.price),
       costPrice: formData.costPrice ? parseFloat(formData.costPrice) : undefined,
       originalPrice: formData.originalPrice ? parseFloat(formData.originalPrice) : undefined,
@@ -638,6 +658,8 @@ const MenuManager: React.FC = () => {
     setDirtyNormal(false);
     setDirtyPizza(false);
     setNormalBaseline('');
+    setOriginalCategory(null);
+    setOriginalItemId(null);
     setIsAddingCategory(false);
     setNewCategoryName('');
     setImageUploadError(null);
@@ -1357,9 +1379,21 @@ const MenuManager: React.FC = () => {
               <div ref={modalBodyRef} onScroll={handleModalScroll} className="flex-1 overflow-y-auto custom-scrollbar p-6 lg:px-12 space-y-10">
                 <div className="rounded-2xl border border-stone-200 dark:border-stone-700 p-3 bg-white dark:bg-stone-900">
                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-400 mb-2">Tipo do item</p>
-                    <div className="flex gap-2">
-                      <button onClick={() => handleTypeSwitch('normal')} className={`px-4 py-2 rounded-xl text-xs font-black uppercase border ${newItemType === 'normal' ? 'bg-orange-500 text-white border-orange-500' : 'border-stone-200 text-stone-500'}`}>Normal</button>
-                      <button onClick={() => handleTypeSwitch('pizza')} className={`px-4 py-2 rounded-xl text-xs font-black uppercase border ${newItemType === 'pizza' ? 'bg-stone-900 text-white border-stone-900' : 'border-stone-200 text-stone-500'}`}>Pizza</button>
+                    <div className="flex gap-2" title={editingId ? 'Este campo não pode ser alterado após a criação' : undefined}>
+                      <button
+                        onClick={() => handleTypeSwitch('normal')}
+                        disabled={!!editingId}
+                        className={`px-4 py-2 rounded-xl text-xs font-black uppercase border ${newItemType === 'normal' ? 'bg-orange-500 text-white border-orange-500' : 'border-stone-200 text-stone-500'} ${editingId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        Normal
+                      </button>
+                      <button
+                        onClick={() => handleTypeSwitch('pizza')}
+                        disabled={!!editingId}
+                        className={`px-4 py-2 rounded-xl text-xs font-black uppercase border ${newItemType === 'pizza' ? 'bg-stone-900 text-white border-stone-900' : 'border-stone-200 text-stone-500'} ${editingId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        Pizza
+                      </button>
                     </div>
                   </div>
 
@@ -1393,7 +1427,14 @@ const MenuManager: React.FC = () => {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className={`space-y-2 ${isAddingCategory ? 'sm:col-span-2' : ''}`}>
                           <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Categoria</label>
-                          {isAddingCategory ? (
+                          {editingId ? (
+                            <div
+                              title="Este campo não pode ser alterado após a criação"
+                              className="w-full h-[58px] bg-stone-100 dark:bg-stone-800/70 px-4 rounded-2xl border border-stone-200 dark:border-stone-700 font-bold text-stone-500 dark:text-stone-300 flex items-center opacity-50 cursor-not-allowed"
+                            >
+                              {originalCategory || formData.category}
+                            </div>
+                          ) : isAddingCategory ? (
                               <div className="flex gap-2 h-[58px] animate-in fade-in slide-in-from-left-2 duration-200">
                                   <input 
                                       autoFocus

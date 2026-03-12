@@ -100,6 +100,23 @@ const setLocal = (key: string, data: any) => {
 
 // --- SERVIÇO DE CARDÁPIO ---
 export const dbMenu = {
+  getById: async (id: string): Promise<MenuItem | null> => {
+    if (!id) return null;
+
+    if (db) {
+      try {
+        const snapshot = await getDoc(doc(db, ...ROOT_PATH, 'menu', id));
+        if (snapshot.exists()) {
+          return { ...snapshot.data(), id: snapshot.id } as MenuItem;
+        }
+      } catch (e) {
+        console.warn('Firestore error on menu item lookup, falling back to local:', e);
+      }
+    }
+
+    const items = getLocal<MenuItem[]>(KEYS.MENU, []);
+    return items.find((item) => item.id === id) || null;
+  },
   getAll: async (): Promise<MenuItem[]> => {
     if (db) {
       try {

@@ -481,12 +481,19 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
         return rawValue.trim() ? parseCurrencyInput(rawValue) : null;
       }).filter((value): value is number => typeof value === 'number'));
 
+      const lockedCategory = (pizzaBase?.category || PIZZA_CATEGORY).trim();
+      const lockedId = pizzaBase?.id || null;
+      if (lockedCategory !== PIZZA_CATEGORY) {
+        console.error('[PizzaConfigurator] Tentativa bloqueada de mudar categoria de pizza.', { lockedCategory, expected: PIZZA_CATEGORY });
+        throw new Error('Este campo não pode ser alterado após a criação');
+      }
+
       const payload: MenuItem = removeUndefinedDeep({
-        id: pizzaBase?.id || `pizza-${Date.now()}`,
+        id: lockedId || `pizza-${Date.now()}`,
         type: 'pizza',
         name: pizzaBase?.name || 'Pizzas',
         pizzaType: activeSizes[0]?.typeName,
-        category: PIZZA_CATEGORY,
+        category: lockedCategory,
         price: allPrices.length ? Math.min(...allPrices) : 0,
           imageUrl: FIXED_PIZZA_IMAGE,
         rating: 5,
@@ -499,7 +506,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
             const raw = borderPrices[border.id]?.[size.id] || '';
             return raw.trim() ? parseCurrencyInput(raw) : null;
           }).filter((value): value is number => typeof value === 'number');
-          return { type: 'pizza' as const, name: border.name, price: prices.length ? Math.min(...prices) : border.extraPrice };
+          return { type: 'borda' as const, name: border.name, price: prices.length ? Math.min(...prices) : border.extraPrice };
         }),
         pricingStrategy: 'fixedBySize' as PizzaPricingStrategy,
         allowedFlavorIds: selectedFlavorIds,
@@ -512,8 +519,16 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
         }))
       });
 
+      if (lockedId && payload.id !== lockedId) {
+        console.error('[PizzaConfigurator] Tentativa bloqueada de alteração de ID.', { lockedId, payloadId: payload.id });
+        throw new Error('Não foi possível salvar: identificador inválido.');
+      }
+
       await dbMenu.save(payload);
       await onSaved();
+    } catch (error) {
+      console.error('Erro ao salvar pizza:', error);
+      window.alert(error instanceof Error ? error.message : 'Não foi possível salvar a pizza.');
     } finally {
       setIsSaving(false);
     }

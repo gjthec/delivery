@@ -18,3 +18,12 @@ View your app in AI Studio: https://ai.studio/apps/drive/1aoiiUj8qW6wG-VtIUAIDjY
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+## Firestore rule suggestion (menu immutability)
+
+To prevent category/id mutation after document creation in `deliveryuai/{storeId}/menu/{pizzaId}`:
+
+```rules
+allow update: if request.resource.data.category == resource.data.category
+  && request.resource.data.id == resource.data.id;
+```
