@@ -400,12 +400,16 @@ const MenuManager: React.FC = () => {
   };
 
   const selectedPizzaDetails = pizzaDetailsData.selectedPizza || detailsItem;
-  const selectedSizes = (((selectedPizzaDetails?.sizes || []) as PizzaSizeOption[]) || []).map((size, index) => ({
+  const onlyActive = <T extends Record<string, any>>(items: T[]) => items.filter((item) => item?.active !== false && item?.isActive !== false);
+  const selectedSizesSource = ((selectedPizzaDetails as MenuItem & { sizes?: PizzaSizeOption[]; pizzaTypes?: Array<Record<string, any>> } | null)?.sizes
+    || (selectedPizzaDetails as MenuItem & { pizzaTypes?: Array<Record<string, any>> } | null)?.pizzaTypes
+    || []) as Array<Record<string, any>>;
+  const selectedSizes = onlyActive(selectedSizesSource).map((size, index) => ({
     ...size,
-    id: size?.id || `size-${index}`,
-    label: size?.label || `Tamanho ${index + 1}`,
-    maxFlavors: Number.isFinite(Number(size?.maxFlavors)) ? Number(size.maxFlavors) : 0,
-    slices: typeof size?.slices === 'number' ? size.slices : null
+    id: String(size?.id || `size-${index}`),
+    label: String(size?.label || size?.typeName || `Tamanho ${index + 1}`),
+    maxFlavors: Number.isFinite(Number(size?.maxFlavors)) ? Number(size.maxFlavors) : Number(size?.flavors || 0),
+    slices: typeof size?.slices === 'number' ? size.slices : (Number.isFinite(Number(size?.slices)) ? Number(size.slices) : null)
   }));
   const selectedExtras = ((selectedPizzaDetails as MenuItem & { extras?: PizzaExtraEntry[] } | null)?.extras || []);
 
@@ -424,8 +428,8 @@ const MenuManager: React.FC = () => {
     return Array.from(extrasByName.values());
   };
 
-  const flavorExtras = normalizeExtrasByName(selectedExtras.filter((extra) => extra && extra.name && extra.type === 'pizza'));
-  const borderExtras = normalizeExtrasByName(selectedExtras.filter((extra) => extra && extra.name && extra.type === 'borda'));
+  const flavorExtras = normalizeExtrasByName(onlyActive(selectedExtras.filter((extra) => extra && extra.name && extra.type === 'pizza')));
+  const borderExtras = normalizeExtrasByName(onlyActive(selectedExtras.filter((extra) => extra && extra.name && extra.type === 'borda')));
   const activeLabel = (selectedPizzaDetails as MenuItem & { active?: boolean } | null)?.active !== false ? 'Ativo' : 'Inativo';
 
   const resolveExtraPriceBySize = (extra: PizzaExtraEntry & Record<string, any>, size: PizzaSizeOption) => {
@@ -1932,6 +1936,7 @@ const MenuManager: React.FC = () => {
                     </div>
                   </section>
 
+                  {selectedSizes.length > 0 && (
                   <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4 overflow-x-auto">
                     <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Preço dos sabores por tamanho</h4>
                     <table className="w-full min-w-[560px] text-xs">
@@ -1958,6 +1963,7 @@ const MenuManager: React.FC = () => {
                       </tbody>
                     </table>
                   </section>
+                  )}
 
                   <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4">
                     <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Bordas</h4>
@@ -1972,6 +1978,7 @@ const MenuManager: React.FC = () => {
                     </div>
                   </section>
 
+                  {selectedSizes.length > 0 && (
                   <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4 overflow-x-auto">
                     <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Preço das bordas por tamanho</h4>
                     <table className="w-full min-w-[560px] text-xs">
@@ -1998,6 +2005,7 @@ const MenuManager: React.FC = () => {
                       </tbody>
                     </table>
                   </section>
+                  )}
                 </>
               )}
             </div>
