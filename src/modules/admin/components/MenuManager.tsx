@@ -413,8 +413,8 @@ const MenuManager: React.FC = () => {
       if (Number.isFinite(candidate)) return candidate;
     }
 
-    const value = Number(extra.price || 0);
-    return Number.isFinite(value) ? value : 0;
+    if (typeof extra.price === 'number' && Number.isFinite(extra.price)) return Number(extra.price);
+    return null;
   };
 
   const handleEdit = async (item: MenuItem) => {
@@ -1924,7 +1924,7 @@ const MenuManager: React.FC = () => {
                           <tr key={extra.name} className="border-t border-stone-100 dark:border-stone-800">
                             <td className="py-2 font-bold text-stone-700 dark:text-stone-200">{extra.name}</td>
                             {selectedSizes.map((size) => (
-                              <td key={`${extra.name}-${size.id}`} className="py-2 text-stone-500">{formatCurrencyBRL(resolveExtraPriceBySize(extra as PizzaExtraEntry & Record<string, any>, size))}</td>
+                              <td key={`${extra.name}-${size.id}`} className="py-2 text-stone-500">{(() => { const value = resolveExtraPriceBySize(extra as PizzaExtraEntry & Record<string, any>, size); return value === null ? '—' : formatCurrencyBRL(value); })()}</td>
                             ))}
                           </tr>
                         ))}
@@ -1964,7 +1964,7 @@ const MenuManager: React.FC = () => {
                           <tr key={border.name} className="border-t border-stone-100 dark:border-stone-800">
                             <td className="py-2 font-bold text-stone-700 dark:text-stone-200">{border.name}</td>
                             {selectedSizes.map((size) => (
-                              <td key={`${border.name}-${size.id}`} className="py-2 text-stone-500">{formatCurrencyBRL(resolveExtraPriceBySize(border as PizzaExtraEntry & Record<string, any>, size))}</td>
+                              <td key={`${border.name}-${size.id}`} className="py-2 text-stone-500">{(() => { const value = resolveExtraPriceBySize(border as PizzaExtraEntry & Record<string, any>, size); return value === null ? '—' : formatCurrencyBRL(value); })()}</td>
                             ))}
                           </tr>
                         ))}

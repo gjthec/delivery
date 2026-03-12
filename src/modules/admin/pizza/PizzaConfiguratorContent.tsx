@@ -39,8 +39,9 @@ interface BorderOption {
 
 type FirestoreExtra = {
   name: string;
-  price: number;
+  price?: number;
   type: 'pizza' | 'borda';
+  priceBySize?: Record<string, number>;
 };
 
 const FIXED_PIZZA_IMAGE = 'https://images.unsplash.com/photo-1513104890138-7c749659a591?q=80&w=800';
@@ -108,6 +109,22 @@ const parseCurrencyInput = (value: string): number => {
 
 const sanitizeIntegerInput = (value: string) => value.replace(/\D/g, '');
 
+const buildPriceBySizeFromInputs = (inputs: Record<string, string>, sizes: PizzaTypeConfig[]) => {
+  return sizes.reduce<Record<string, number>>((acc, size) => {
+    const raw = inputs[size.id] || '';
+    if (!raw.trim()) return acc;
+    acc[size.id] = parseCurrencyInput(raw);
+    return acc;
+  }, {});
+};
+
+const getFallbackPriceFromMap = (map: Record<string, number> | undefined, fallback = 0) => {
+  if (!map) return fallback;
+  const values = Object.values(map).filter((value) => Number.isFinite(value));
+  if (values.length === 0) return fallback;
+  return Math.min(...values);
+};
+
 const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _categories, onSaved, onDirtyChange }) => {
   const [isSaving, setIsSaving] = useState(false);
 
@@ -173,19 +190,30 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
 
       const initialBorderPrices: Record<string, Record<string, string>> = {};
       initialBorders.forEach((border) => {
+        const borderExtra = (((pizzaBase?.extras || []) as FirestoreExtra[]).find((extra) => extra.type === 'borda' && extra.name.trim().toLowerCase() === border.name.trim().toLowerCase()));
         initialBorderPrices[border.id] = {};
         mergedTypes.filter((type) => type.isActive !== false).forEach((size) => {
-          initialBorderPrices[border.id][size.id] = String(border.extraPrice || 0);
+          const bySizePrice = Number(borderExtra?.priceBySize?.[size.id]);
+          initialBorderPrices[border.id][size.id] = Number.isFinite(bySizePrice) ? String(bySizePrice) : String(border.extraPrice || 0);
         });
       });
       setBorderPrices(initialBorderPrices);
 
       const pricingSnapshot: Record<string, Record<string, string>> = {};
+      const flavorExtrasFromPizza = (((pizzaBase?.extras || []) as FirestoreExtra[]).filter((extra) => extra.type === 'pizza'));
+
       flavorsData.forEach((flavor) => {
+        const linkedExtra = flavorExtrasFromPizza.find((extra) => extra.name.trim().toLowerCase() === flavor.name.trim().toLowerCase());
         pricingSnapshot[flavor.id] = {};
-        Object.entries(flavor.priceDeltaBySize || {}).forEach(([sizeId, price]) => {
-          pricingSnapshot[flavor.id][sizeId] = String(price);
-        });
+        if (linkedExtra?.priceBySize) {
+          Object.entries(linkedExtra.priceBySize).forEach(([sizeId, price]) => {
+            pricingSnapshot[flavor.id][sizeId] = String(price);
+          });
+        } else {
+          Object.entries(flavor.priceDeltaBySize || {}).forEach(([sizeId, price]) => {
+            pricingSnapshot[flavor.id][sizeId] = String(price);
+          });
+        }
       });
       setFlavorPrices(pricingSnapshot);
 
@@ -243,7 +271,8 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
       if (isSelected) {
         await removeFlavorExtraForPizza(flavor.name);
       } else {
-        await upsertFlavorExtraForPizza(flavor.name, Number(flavor.extraPrice || 0));
+        const bySize = buildPriceBySizeFromInputs(flavorPrices[flavor.id] || {}, activeSizes);
+        await upsertFlavorExtraForPizza(flavor.name, bySize, Number(flavor.extraPrice || 0));
       }
     } catch (error) {
       console.error('Erro ao sincronizar sabor com Firestore:', error);
@@ -366,7 +395,8 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
       setPizzaFlavors(updatedFlavors);
       setSelectedFlavorIds((prev) => (prev.includes(flavorId) ? prev : [...prev, flavorId]));
       if (pizzaBase?.id) {
-        await upsertFlavorExtraForPizza(normalizedName, Number(payload.extraPrice || 0));
+        const bySize = buildPriceBySizeFromInputs(flavorPrices[flavorId] || {}, activeSizes);
+        await upsertFlavorExtraForPizza(normalizedName, bySize, Number(payload.extraPrice || 0));
       }
       resetQuickFlavorForm();
       setQuickFlavorMessage(editingFlavorId ? 'Sabor atualizado com sucesso.' : 'Sabor criado com sucesso e vinculado à pizza.');
@@ -455,11 +485,22 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
       if (editingBorderId) {
         const existing = extractBorderExtras(freshPizza).find((extra) => slugify(extra.name) === slugify((borders.find((b) => b.id === editingBorderId)?.name || '')));
         if (existing) {
-          await dbMenu.removePizzaExtra(pizzaBase.id, { name: existing.name, price: Number(existing.price || 0), type: 'borda' });
+          await dbMenu.removePizzaExtra(pizzaBase.id, {
+            name: existing.name,
+            type: 'borda',
+            price: typeof existing.price === 'number' ? Number(existing.price) : undefined,
+            priceBySize: existing.priceBySize
+          });
         }
       }
 
-      await dbMenu.addPizzaExtra(pizzaBase.id, { name: payload.name, price: payload.extraPrice, type: 'borda' });
+      const bySize = buildPriceBySizeFromInputs(borderPrices[payload.id] || {}, activeSizes);
+      await dbMenu.addPizzaExtra(pizzaBase.id, {
+        name: payload.name,
+        type: 'borda',
+        priceBySize: bySize,
+        price: getFallbackPriceFromMap(bySize, payload.extraPrice)
+      });
       await syncPizzaExtrasFromFirestore();
       setEditingBorderId(null);
       setBorderDraft(EMPTY_BORDER_DRAFT);
@@ -493,7 +534,12 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
       const existing = extractBorderExtras(freshPizza).find((extra) => extra.name.trim().toLowerCase() === targetBorder.name.trim().toLowerCase());
       if (!existing) return;
 
-      await dbMenu.removePizzaExtra(pizzaBase.id, { name: existing.name, price: Number(existing.price || 0), type: 'borda' });
+      await dbMenu.removePizzaExtra(pizzaBase.id, {
+        name: existing.name,
+        type: 'borda',
+        price: typeof existing.price === 'number' ? Number(existing.price) : undefined,
+        priceBySize: existing.priceBySize
+      });
       await syncPizzaExtrasFromFirestore();
     } catch (error) {
       console.error('Erro ao remover borda no Firestore:', error);
@@ -506,7 +552,7 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
     id: `pizza-border-${index}-${slugify(extra.name || '') || Date.now()}`,
     name: extra.name || '',
     borderType: 'Salgada',
-    extraPrice: Math.max(0, Number(extra.price || 0)),
+    extraPrice: Math.max(0, Number(getFallbackPriceFromMap(extra.priceBySize, Number(extra.price || 0)))),
     active: true
   });
 
@@ -525,6 +571,35 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
     const freshFlavorExtras = extractPizzaExtras(freshPizza);
 
     setBorders(freshBorders);
+
+    setFlavorPrices((prev) => {
+      const next = { ...prev };
+      freshFlavorExtras.forEach((extra) => {
+        const flavor = pizzaFlavors.find((item) => item.name.trim().toLowerCase() === extra.name.trim().toLowerCase());
+        if (!flavor) return;
+        next[flavor.id] = {};
+        const bySize = extra.priceBySize || {};
+        Object.entries(bySize).forEach(([sizeId, price]) => {
+          next[flavor.id][sizeId] = String(price);
+        });
+      });
+      return next;
+    });
+
+    setBorderPrices((prev) => {
+      const next = { ...prev };
+      const allBorderExtras = extractBorderExtras(freshPizza);
+      freshBorders.forEach((border) => {
+        const borderExtra = allBorderExtras.find((extra) => extra.name.trim().toLowerCase() === border.name.trim().toLowerCase());
+        next[border.id] = {};
+        activeSizes.forEach((size) => {
+          const specific = Number(borderExtra?.priceBySize?.[size.id]);
+          next[border.id][size.id] = Number.isFinite(specific) ? String(specific) : String(border.extraPrice || 0);
+        });
+      });
+      return next;
+    });
+
     setSelectedFlavorIds((prev) => {
       const names = new Set(freshFlavorExtras.map((extra) => extra.name.toLowerCase()));
       return prev.filter((id) => {
@@ -536,15 +611,25 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
     return freshPizza;
   };
 
-  const upsertFlavorExtraForPizza = async (flavorName: string, price: number) => {
+  const upsertFlavorExtraForPizza = async (flavorName: string, priceBySize: Record<string, number>, fallbackPrice: number) => {
     if (!pizzaBase?.id) return;
 
     const freshPizza = await dbMenu.getById(pizzaBase.id);
     const existing = extractPizzaExtras(freshPizza).find((extra) => extra.name.trim().toLowerCase() === flavorName.trim().toLowerCase());
-    const nextExtra: FirestoreExtra = { name: flavorName.trim(), price: Math.max(0, Number(price || 0)), type: 'pizza' };
+    const nextExtra: FirestoreExtra = {
+      name: flavorName.trim(),
+      type: 'pizza',
+      priceBySize: Object.keys(priceBySize).length ? priceBySize : undefined,
+      price: Math.max(0, Number(fallbackPrice || getFallbackPriceFromMap(priceBySize, 0)))
+    };
 
     if (existing) {
-      await dbMenu.removePizzaExtra(pizzaBase.id, { name: existing.name, price: Number(existing.price || 0), type: 'pizza' });
+      await dbMenu.removePizzaExtra(pizzaBase.id, {
+        name: existing.name,
+        type: 'pizza',
+        price: typeof existing.price === 'number' ? Number(existing.price) : undefined,
+        priceBySize: existing.priceBySize
+      });
     }
 
     await dbMenu.addPizzaExtra(pizzaBase.id, nextExtra);
@@ -558,7 +643,12 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
     const existing = extractPizzaExtras(freshPizza).find((extra) => extra.name.trim().toLowerCase() === flavorName.trim().toLowerCase());
     if (!existing) return;
 
-    await dbMenu.removePizzaExtra(pizzaBase.id, { name: existing.name, price: Number(existing.price || 0), type: 'pizza' });
+    await dbMenu.removePizzaExtra(pizzaBase.id, {
+      name: existing.name,
+      type: 'pizza',
+      price: typeof existing.price === 'number' ? Number(existing.price) : undefined,
+      priceBySize: existing.priceBySize
+    });
     await syncPizzaExtrasFromFirestore();
   };
 
@@ -629,14 +719,26 @@ const PizzaConfiguratorContent: React.FC<Props> = ({ pizzaBase, categories: _cat
               const raw = flavorPrices[flavor.id]?.[size.id] || '';
               return raw.trim() ? parseCurrencyInput(raw) : null;
             }).filter((value): value is number => typeof value === 'number');
-            return { type: 'pizza' as const, name: flavor.name, price: prices.length ? Math.min(...prices) : Number(flavor.extraPrice || 0) };
+            const priceBySize = activeSizes.reduce<Record<string, number>>((acc, size) => {
+              const raw = flavorPrices[flavor.id]?.[size.id] || '';
+              if (!raw.trim()) return acc;
+              acc[size.id] = parseCurrencyInput(raw);
+              return acc;
+            }, {});
+            return { type: 'pizza' as const, name: flavor.name, priceBySize, price: getFallbackPriceFromMap(priceBySize, prices.length ? Math.min(...prices) : Number(flavor.extraPrice || 0)) };
           }),
           ...borders.filter((border) => border.active).map((border) => {
             const prices = activeSizes.map((size) => {
               const raw = borderPrices[border.id]?.[size.id] || '';
               return raw.trim() ? parseCurrencyInput(raw) : null;
             }).filter((value): value is number => typeof value === 'number');
-            return { type: 'borda' as const, name: border.name, price: prices.length ? Math.min(...prices) : border.extraPrice };
+            const priceBySize = activeSizes.reduce<Record<string, number>>((acc, size) => {
+              const raw = borderPrices[border.id]?.[size.id] || '';
+              if (!raw.trim()) return acc;
+              acc[size.id] = parseCurrencyInput(raw);
+              return acc;
+            }, {});
+            return { type: 'borda' as const, name: border.name, priceBySize, price: getFallbackPriceFromMap(priceBySize, prices.length ? Math.min(...prices) : border.extraPrice) };
           })
         ],
         pricingStrategy: 'fixedBySize' as PizzaPricingStrategy,

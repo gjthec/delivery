@@ -41,8 +41,9 @@ export type PizzaDetailsSnapshot = {
 
 type PizzaExtraPayload = {
   name: string;
-  price: number;
+  price?: number;
   type: 'pizza' | 'borda';
+  priceBySize?: Record<string, number>;
 };
 
 // Caminho raiz para organização dos dados
@@ -213,13 +214,23 @@ export const dbMenu = {
   addPizzaExtra: async (pizzaId: string, extra: PizzaExtraPayload): Promise<void> => {
     if (!db) throw new Error('Firestore indisponível para salvar extras da pizza.');
     await updateDoc(doc(db, ...ROOT_PATH, 'menu', pizzaId), {
-      extras: arrayUnion({ name: extra.name, price: Number(extra.price || 0), type: extra.type })
+      extras: arrayUnion(sanitizeData({
+        name: extra.name,
+        type: extra.type,
+        price: typeof extra.price === 'number' ? Number(extra.price || 0) : undefined,
+        priceBySize: extra.priceBySize || undefined
+      }))
     });
   },
   removePizzaExtra: async (pizzaId: string, extra: PizzaExtraPayload): Promise<void> => {
     if (!db) throw new Error('Firestore indisponível para remover extras da pizza.');
     await updateDoc(doc(db, ...ROOT_PATH, 'menu', pizzaId), {
-      extras: arrayRemove({ name: extra.name, price: Number(extra.price || 0), type: extra.type })
+      extras: arrayRemove(sanitizeData({
+        name: extra.name,
+        type: extra.type,
+        price: typeof extra.price === 'number' ? Number(extra.price || 0) : undefined,
+        priceBySize: extra.priceBySize || undefined
+      }))
     });
   }
 };
