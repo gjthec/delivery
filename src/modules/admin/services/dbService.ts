@@ -961,7 +961,7 @@ export const dbPizzaTypes = {
 
     if (db) {
       try {
-        const snapshot = await getDocs(collection(db, ...ROOT_PATH, 'catalog', 'pizzaTypes'));
+        const snapshot = await getDocs(collection(db, ...ROOT_PATH, 'pizzaTypes'));
         const items = snapshot.docs
           .map((docSnap) => normalize({ id: docSnap.id, ...(docSnap.data() as Partial<PizzaTypeConfig>) }))
           .filter((item): item is PizzaTypeConfig => Boolean(item));
@@ -985,7 +985,7 @@ export const dbPizzaTypes = {
     const payload = sanitizeData({ ...pizzaType, isActive: pizzaType.isActive !== false, updatedAt: new Date().toISOString(), createdAt: pizzaType.createdAt || new Date().toISOString() });
     if (db) {
       try {
-        await setDoc(doc(db, ...ROOT_PATH, 'catalog', 'pizzaTypes', payload.id), payload);
+        await setDoc(doc(db, ...ROOT_PATH, 'pizzaTypes', payload.id), payload);
       } catch (error) {
         console.error('Error creating pizza type:', error);
       }
@@ -1013,7 +1013,7 @@ export const dbPizzaFlavors = {
       throw new Error('Firestore indisponível para leitura de sabores.');
     }
 
-    const snapshot = await getDocs(collection(db, ...ROOT_PATH, 'catalog', 'pizzaFlavors'));
+    const snapshot = await getDocs(collection(db, ...ROOT_PATH, 'pizzaFlavors'));
     const items: PizzaFlavor[] = [];
     snapshot.forEach((docSnap) => {
       const payload = docSnap.data() as PizzaFlavor & { isActive?: boolean; category?: string };
@@ -1059,7 +1059,7 @@ export const dbPizzaFlavors = {
       flavorType: item.flavorType === 'Doce' ? 'Doce' : 'Salgado'
     });
 
-    await setDoc(doc(db, ...ROOT_PATH, 'catalog', 'pizzaFlavors', sanitized.id), sanitized);
+    await setDoc(doc(db, ...ROOT_PATH, 'pizzaFlavors', sanitized.id), sanitized);
   },
   createFlavor: async (item: PizzaFlavor): Promise<void> => {
     await dbPizzaFlavors.save(item);
@@ -1078,7 +1078,7 @@ export const dbPizzaFlavors = {
       throw new Error('Firestore indisponível para remover sabores.');
     }
 
-    await deleteDoc(doc(db, ...ROOT_PATH, 'catalog', 'pizzaFlavors', id));
+    await deleteDoc(doc(db, ...ROOT_PATH, 'pizzaFlavors', id));
   }
 };
 
