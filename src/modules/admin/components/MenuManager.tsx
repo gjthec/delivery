@@ -34,6 +34,21 @@ const EMPTY_FLAVOR_DRAFT: FlavorDraft = {
 };
 
 
+
+type PizzaExtraEntry = {
+  name: string;
+  price: number;
+  type?: string;
+};
+
+type PizzaDetailsSizeRow = {
+  id: string;
+  pizzaType: string;
+  slices: number | null;
+  flavorsCount: number;
+  active: boolean;
+};
+
 const MenuManager: React.FC = () => {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<string[]>(INITIAL_CATEGORIES.map(c => c.name));
@@ -110,6 +125,10 @@ const MenuManager: React.FC = () => {
   const modalBodyRef = useRef<HTMLDivElement | null>(null);
   const [showScrollToType, setShowScrollToType] = useState(false);
   const [detailsItem, setDetailsItem] = useState<MenuItem | null>(null);
+  const [pizzaDetailsData, setPizzaDetailsData] = useState<{ selectedPizza: MenuItem | null; pizzas: MenuItem[] }>({ selectedPizza: null, pizzas: [] });
+  const [pizzaDetailsLoading, setPizzaDetailsLoading] = useState(false);
+  const [pizzaDetailsError, setPizzaDetailsError] = useState<string | null>(null);
+  const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
 
   const openAlert = (message: string, title: string = 'Atenção') => {
     setAlertModal({ title, message });
@@ -161,6 +180,32 @@ const MenuManager: React.FC = () => {
 
     loadInitialData();
   }, []);
+
+  useEffect(() => {
+    if (!detailsItem || detailsItem.type !== 'pizza') {
+      setPizzaDetailsLoading(false);
+      setPizzaDetailsError(null);
+      setPizzaDetailsData({ selectedPizza: null, pizzas: [] });
+      return;
+    }
+
+    setPizzaDetailsLoading(true);
+    setPizzaDetailsError(null);
+
+    const unsubscribe = dbMenu.subscribePizzaDetails(
+      detailsItem.id,
+      (payload) => {
+        setPizzaDetailsData(payload);
+        setPizzaDetailsLoading(false);
+      },
+      () => {
+        setPizzaDetailsError('Não foi possível carregar os dados da pizza em tempo real.');
+        setPizzaDetailsLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [detailsItem]);
 
   // Garante que o form inicie com uma categoria válida
   useEffect(() => {
@@ -358,6 +403,61 @@ const MenuManager: React.FC = () => {
     const sizes = getPizzaSizes(item);
     if (sizes.length === 0) return item.price;
     return Math.min(...sizes.map((size) => Number(size.basePrice || 0)));
+  };
+
+  const selectedPizzaDetails = pizzaDetailsData.selectedPizza || detailsItem;
+  const firestorePizzaItems = pizzaDetailsData.pizzas;
+
+  const sizeRows = Array.from(
+    new Map(
+      firestorePizzaItems.map((pizza) => {
+        const pizzaType = (pizza.pizzaType || pizza.name || 'Tamanho sem nome').trim();
+        const slices = (pizza as MenuItem & { slices?: number }).slices;
+        return [
+          pizzaType,
+          {
+            id: pizza.id,
+            pizzaType,
+            slices: typeof slices === 'number' ? slices : null,
+            flavorsCount: (pizza.allowedFlavorIds || []).length,
+            active: (pizza as MenuItem & { active?: boolean }).active !== false
+          } as PizzaDetailsSizeRow
+        ];
+      })
+    ).values()
+  );
+
+  const pizzaTypes = sizeRows.map((row) => row.pizzaType);
+
+  const getExtrasByType = (item: MenuItem | null | undefined, target: 'pizza' | 'borda') => {
+    const extras = ((item as MenuItem & { extras?: PizzaExtraEntry[] })?.extras || []);
+    return extras.filter((extra) => extra && extra.name && extra.type === target);
+  };
+
+  const flavorNames = Array.from(new Set(
+    firestorePizzaItems.flatMap((pizza) => getExtrasByType(pizza, 'pizza').map((extra) => extra.name))
+  ));
+
+  const borderNames = Array.from(new Set(
+    firestorePizzaItems.flatMap((pizza) => getExtrasByType(pizza, 'borda').map((extra) => extra.name))
+  ));
+
+  const getExtraPrice = (pizzaType: string, extraName: string, target: 'pizza' | 'borda') => {
+    const pizza = firestorePizzaItems.find((item) => (item.pizzaType || item.name || '').trim() === pizzaType);
+    const extra = getExtrasByType(pizza, target).find((entry) => entry.name === extraName);
+    const value = Number(extra?.price || 0);
+    return Number.isFinite(value) ? value : 0;
+  };
+
+  const handleToggleSizeStatus = async (row: PizzaDetailsSizeRow) => {
+    try {
+      setStatusUpdatingId(row.id);
+      await dbMenu.updateActiveStatus(row.id, !row.active);
+    } catch {
+      openAlert('Não foi possível atualizar o status desse tamanho.');
+    } finally {
+      setStatusUpdatingId(null);
+    }
   };
 
   const handleEdit = (item: MenuItem) => {
@@ -1776,107 +1876,118 @@ const MenuManager: React.FC = () => {
             <div className="sticky top-0 z-10 px-6 py-4 border-b border-stone-100 dark:border-stone-800 bg-white/95 dark:bg-stone-900/95 backdrop-blur flex items-start justify-between gap-4">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-500">Detalhes da pizza</p>
-                <h3 className="font-black text-xl text-stone-800 dark:text-white uppercase">{detailsItem.name}</h3>
-                <p className="text-xs text-stone-500">{`${getPizzaSizes(detailsItem).length} tamanhos • ${getPizzaFlavorIds(detailsItem).length} sabores • ${getPizzaBorders(detailsItem).length} bordas`}</p>
+                <h3 className="font-black text-xl text-stone-800 dark:text-white uppercase">{selectedPizzaDetails?.name || detailsItem.name}</h3>
+                <p className="text-xs text-stone-500">{`${sizeRows.length} tamanhos • ${flavorNames.length} sabores • ${borderNames.length} bordas`}</p>
               </div>
               <button onClick={() => setDetailsItem(null)} className="p-2 rounded-xl bg-stone-100 dark:bg-stone-800 text-stone-500 hover:text-stone-700"><X size={18} /></button>
             </div>
 
             <div className="p-6 space-y-6">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4">
-                  <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Tamanhos</h4>
-                  <div className="space-y-2">
-                    {getPizzaSizes(detailsItem).map((size) => (
-                      <div key={size.id} className="grid grid-cols-4 gap-2 text-xs bg-stone-50 dark:bg-stone-800/40 rounded-xl px-3 py-2">
-                        <span className="font-black text-stone-700 dark:text-stone-200">{size.label}</span>
-                        <span className="text-stone-500">{size.slices || '-'} fatias</span>
-                        <span className="text-stone-500">{size.maxFlavors} sabores</span>
-                        <span className="text-emerald-500 font-bold">Ativo</span>
-                      </div>
-                    ))}
-                    {getPizzaSizes(detailsItem).length === 0 && <p className="text-xs text-stone-400">Nenhum tamanho cadastrado.</p>}
-                  </div>
-                </section>
-
-                <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4">
-                  <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Sabores</h4>
-                  <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                    {globalPizzaFlavors.filter((flavor) => getPizzaFlavorIds(detailsItem).includes(flavor.id)).map((flavor) => (
-                      <div key={flavor.id} className="text-xs bg-stone-50 dark:bg-stone-800/40 rounded-xl px-3 py-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-black text-stone-700 dark:text-stone-200">{flavor.name}</span>
-                          <span className={`font-bold ${flavor.active !== false ? 'text-emerald-500' : 'text-stone-400'}`}>{flavor.active !== false ? 'Ativo' : 'Inativo'}</span>
-                        </div>
-                        <p className="text-stone-500">{flavor.flavorType || '—'} • {flavor.category || 'Sem categoria'}</p>
-                        <p className="text-stone-400 line-clamp-1">{flavor.ingredients.map((ingredient) => ingredient.name).join(', ') || 'Sem ingredientes informados'}</p>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              </div>
-
-              <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4 overflow-x-auto">
-                <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Preço dos sabores por tamanho</h4>
-                <table className="w-full min-w-[560px] text-xs">
-                  <thead>
-                    <tr className="text-left text-stone-400 uppercase">
-                      <th className="pb-2">Sabor</th>
-                      {getPizzaSizes(detailsItem).map((size) => <th key={size.id} className="pb-2">{size.label}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {globalPizzaFlavors.filter((flavor) => getPizzaFlavorIds(detailsItem).includes(flavor.id)).map((flavor) => (
-                      <tr key={flavor.id} className="border-t border-stone-100 dark:border-stone-800">
-                        <td className="py-2 font-bold text-stone-700 dark:text-stone-200">{flavor.name}</td>
-                        {getPizzaSizes(detailsItem).map((size) => {
-                          const delta = Number(flavor.priceDeltaBySize?.[size.id] ?? flavor.priceDeltaBySize?.[size.label] ?? 0);
-                          const finalPrice = Number(size.basePrice || 0) + (Number.isFinite(delta) ? delta : 0);
-                          return <td key={`${flavor.id}-${size.id}`} className="py-2 text-stone-500">{formatCurrencyBRL(finalPrice)}</td>;
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </section>
-
-              <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4">
-                <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Bordas</h4>
-                <div className="space-y-2">
-                  {getPizzaBorders(detailsItem).map((border, index) => (
-                    <div key={border.id || index} className="grid grid-cols-3 gap-2 text-xs bg-stone-50 dark:bg-stone-800/40 rounded-xl px-3 py-2">
-                      <span className="font-black text-stone-700 dark:text-stone-200">{border.name || border.label || 'Borda sem nome'}</span>
-                      <span className="text-stone-500">{border.type || 'Tipo padrão'}</span>
-                      <span className={`font-bold ${border.active === false ? 'text-stone-400' : 'text-emerald-500'}`}>{border.active === false ? 'Inativo' : 'Ativo'}</span>
-                    </div>
-                  ))}
-                  {getPizzaBorders(detailsItem).length === 0 && <p className="text-xs text-stone-400">Nenhuma borda cadastrada.</p>}
+              {pizzaDetailsError && (
+                <div className="rounded-xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-300">
+                  {pizzaDetailsError}
                 </div>
-              </section>
+              )}
 
-              <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4 overflow-x-auto">
-                <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Preço das bordas por tamanho</h4>
-                <table className="w-full min-w-[560px] text-xs">
-                  <thead>
-                    <tr className="text-left text-stone-400 uppercase">
-                      <th className="pb-2">Borda</th>
-                      {getPizzaSizes(detailsItem).map((size) => <th key={size.id} className="pb-2">{size.label}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {getPizzaBorders(detailsItem).map((border, index) => (
-                      <tr key={border.id || index} className="border-t border-stone-100 dark:border-stone-800">
-                        <td className="py-2 font-bold text-stone-700 dark:text-stone-200">{border.name || border.label || 'Borda'}</td>
-                        {getPizzaSizes(detailsItem).map((size) => {
-                          const priceBySize = border.priceBySize || border.extraPriceBySize || {};
-                          const value = Number(priceBySize[size.id] ?? priceBySize[size.label] ?? border.extraPrice ?? 0);
-                          return <td key={`${border.id || index}-${size.id}`} className="py-2 text-stone-500">{formatCurrencyBRL(Number.isFinite(value) ? value : 0)}</td>;
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </section>
+              {pizzaDetailsLoading ? (
+                <div className="space-y-4 animate-pulse">
+                  <div className="h-24 rounded-2xl bg-stone-100 dark:bg-stone-800" />
+                  <div className="h-40 rounded-2xl bg-stone-100 dark:bg-stone-800" />
+                  <div className="h-24 rounded-2xl bg-stone-100 dark:bg-stone-800" />
+                  <div className="h-40 rounded-2xl bg-stone-100 dark:bg-stone-800" />
+                </div>
+              ) : (
+                <>
+                  <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4">
+                    <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Tamanhos</h4>
+                    <div className="space-y-2">
+                      {sizeRows.map((row) => (
+                        <div key={row.pizzaType} className="grid grid-cols-1 md:grid-cols-5 gap-2 text-xs bg-stone-50 dark:bg-stone-800/40 rounded-xl px-3 py-2 items-center">
+                          <span className="font-black text-stone-700 dark:text-stone-200">{row.pizzaType}</span>
+                          <span className="text-stone-500">{row.slices ?? '-'} fatias</span>
+                          <span className="text-stone-500">{row.flavorsCount} sabores</span>
+                          <button
+                            onClick={() => handleToggleSizeStatus(row)}
+                            disabled={statusUpdatingId === row.id}
+                            className={`justify-self-start px-2 py-1 rounded-md font-bold transition-colors ${row.active ? 'text-[#00e5b0] bg-emerald-500/10' : 'text-stone-400 bg-stone-200/40 dark:bg-stone-700/50'}`}
+                          >
+                            {statusUpdatingId === row.id ? 'Atualizando...' : row.active ? 'Ativo' : 'Inativo'}
+                          </button>
+                          <span className="text-[10px] text-stone-400">ID: {row.id}</span>
+                        </div>
+                      ))}
+                      {sizeRows.length === 0 && <p className="text-xs text-stone-400">Nenhum tamanho cadastrado.</p>}
+                    </div>
+                  </section>
+
+                  <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4 overflow-x-auto">
+                    <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Preço dos sabores por tamanho</h4>
+                    <table className="w-full min-w-[560px] text-xs">
+                      <thead>
+                        <tr className="text-left text-stone-400 uppercase">
+                          <th className="pb-2">Sabor</th>
+                          {pizzaTypes.map((pizzaType) => <th key={pizzaType} className="pb-2">{pizzaType}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {flavorNames.map((flavor) => (
+                          <tr key={flavor} className="border-t border-stone-100 dark:border-stone-800">
+                            <td className="py-2 font-bold text-stone-700 dark:text-stone-200">{flavor}</td>
+                            {pizzaTypes.map((pizzaType) => (
+                              <td key={`${flavor}-${pizzaType}`} className="py-2 text-stone-500">{formatCurrencyBRL(getExtraPrice(pizzaType, flavor, 'pizza'))}</td>
+                            ))}
+                          </tr>
+                        ))}
+                        {flavorNames.length === 0 && (
+                          <tr>
+                            <td colSpan={Math.max(1, pizzaTypes.length + 1)} className="py-3 text-stone-400">Nenhum sabor com preço cadastrado.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </section>
+
+                  <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4">
+                    <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Bordas</h4>
+                    <div className="space-y-2">
+                      {borderNames.map((border) => (
+                        <div key={border} className="grid grid-cols-2 gap-2 text-xs bg-stone-50 dark:bg-stone-800/40 rounded-xl px-3 py-2">
+                          <span className="font-black text-stone-700 dark:text-stone-200">{border}</span>
+                          <span className="text-stone-500">Disponível em {pizzaTypes.filter((pizzaType) => getExtraPrice(pizzaType, border, 'borda') > 0).length || pizzaTypes.length} tamanhos</span>
+                        </div>
+                      ))}
+                      {borderNames.length === 0 && <p className="text-xs text-stone-400">Nenhuma borda cadastrada.</p>}
+                    </div>
+                  </section>
+
+                  <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4 overflow-x-auto">
+                    <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Preço das bordas por tamanho</h4>
+                    <table className="w-full min-w-[560px] text-xs">
+                      <thead>
+                        <tr className="text-left text-stone-400 uppercase">
+                          <th className="pb-2">Borda</th>
+                          {pizzaTypes.map((pizzaType) => <th key={pizzaType} className="pb-2">{pizzaType}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {borderNames.map((border) => (
+                          <tr key={border} className="border-t border-stone-100 dark:border-stone-800">
+                            <td className="py-2 font-bold text-stone-700 dark:text-stone-200">{border}</td>
+                            {pizzaTypes.map((pizzaType) => (
+                              <td key={`${border}-${pizzaType}`} className="py-2 text-stone-500">{formatCurrencyBRL(getExtraPrice(pizzaType, border, 'borda'))}</td>
+                            ))}
+                          </tr>
+                        ))}
+                        {borderNames.length === 0 && (
+                          <tr>
+                            <td colSpan={Math.max(1, pizzaTypes.length + 1)} className="py-3 text-stone-400">Nenhuma borda cadastrada.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </section>
+                </>
+              )}
             </div>
           </div>
         </div>
