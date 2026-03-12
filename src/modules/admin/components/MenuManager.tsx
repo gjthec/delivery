@@ -109,6 +109,7 @@ const MenuManager: React.FC = () => {
   const confirmResolver = useRef<((value: boolean) => void) | null>(null);
   const modalBodyRef = useRef<HTMLDivElement | null>(null);
   const [showScrollToType, setShowScrollToType] = useState(false);
+  const [detailsItem, setDetailsItem] = useState<MenuItem | null>(null);
 
   const openAlert = (message: string, title: string = 'Atenção') => {
     setAlertModal({ title, message });
@@ -325,6 +326,39 @@ const MenuManager: React.FC = () => {
   };
 
   const processedItems = getProcessedItems();
+
+  const formatCurrencyBRL = (value: number) => new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value);
+
+  const isItemActive = (item: MenuItem) => (item as MenuItem & { active?: boolean }).active !== false;
+
+  const getPizzaSizes = (item: MenuItem) => item.sizes || [];
+
+  const getPizzaFlavorIds = (item: MenuItem) => item.allowedFlavorIds || [];
+
+  const getPizzaBorders = (item: MenuItem) => {
+    const rawItem = item as MenuItem & {
+      borders?: Array<Record<string, any>>;
+      borderOptions?: Array<Record<string, any>>;
+      crustOptions?: Array<Record<string, any>>;
+      allowedBorderIds?: string[];
+    };
+
+    const source = rawItem.borders || rawItem.borderOptions || rawItem.crustOptions || [];
+    if (source.length > 0) return source;
+
+    return (rawItem.allowedBorderIds || []).map((id) => ({ id, name: id }));
+  };
+
+  const getStartingPrice = (item: MenuItem) => {
+    const sizes = getPizzaSizes(item);
+    if (sizes.length === 0) return item.price;
+    return Math.min(...sizes.map((size) => Number(size.basePrice || 0)));
+  };
 
   const handleEdit = (item: MenuItem) => {
     if (item.type === 'pizza') {
@@ -966,7 +1000,7 @@ const MenuManager: React.FC = () => {
       return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {items.map(item => (
-            <div key={item.id} className="bg-white dark:bg-stone-900 rounded-[2.5rem] border border-stone-100 dark:border-stone-800 p-5 group shadow-sm hover:shadow-xl transition-all relative overflow-hidden">
+            <div key={item.id} onClick={() => item.type === 'pizza' && setDetailsItem(item)} className={`bg-white dark:bg-stone-900 rounded-[2.5rem] border border-stone-100 dark:border-stone-800 p-5 group shadow-sm hover:shadow-xl transition-all relative overflow-hidden ${item.type === 'pizza' ? 'cursor-pointer' : ''}`}>
                 <div className="relative h-44 rounded-[1.5rem] overflow-hidden mb-5">
                 <img src={item.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt={item.name} />
                 <div className="absolute top-3 left-3 flex gap-1">
@@ -981,17 +1015,38 @@ const MenuManager: React.FC = () => {
                 <div className="space-y-1 mb-4">
                 <span className="text-[10px] font-black text-orange-500 uppercase tracking-widest">{item.category}</span>
                 <h3 className="font-black text-stone-800 dark:text-stone-100 uppercase text-xs truncate leading-tight">{item.name}</h3>
+                {item.type === 'pizza' && (
+                  <>
+                    <div className="text-[11px] font-bold text-stone-500 dark:text-stone-300">
+                      {`${getPizzaSizes(item).length} tamanhos • ${getPizzaFlavorIds(item).length} sabores • ${getPizzaBorders(item).length} bordas`}
+                    </div>
+                    {getPizzaSizes(item).length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {getPizzaSizes(item).slice(0, 4).map((size) => (
+                          <span key={size.id} className="text-[9px] text-stone-400 font-bold bg-stone-50 dark:bg-stone-800 px-1.5 py-0.5 rounded-md">{size.label}</span>
+                        ))}
+                        {getPizzaSizes(item).length > 4 && (
+                          <span className="text-[9px] text-stone-400 font-bold bg-stone-50 dark:bg-stone-800 px-1.5 py-0.5 rounded-md">+{getPizzaSizes(item).length - 4}</span>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
                 </div>
                 <div className="flex justify-between items-center pt-4 border-t border-stone-50 dark:border-stone-800">
                 <div className="flex flex-col">
-                    <span className="text-sm font-black text-stone-900 dark:text-white">R$ {item.price.toFixed(2)}</span>
+                    <span className="text-sm font-black text-stone-900 dark:text-white">{item.type === 'pizza' ? `A partir de ${formatCurrencyBRL(getStartingPrice(item))}` : formatCurrencyBRL(item.price)}</span>
                     {item.originalPrice && (
-                    <span className="text-[10px] text-stone-400 line-through">R$ {item.originalPrice.toFixed(2)}</span>
+                    <span className="text-[10px] text-stone-400 line-through">{formatCurrencyBRL(item.originalPrice)}</span>
+                    )}
+                    {item.type === 'pizza' && (
+                      <span className={`mt-1 text-[10px] font-black uppercase ${isItemActive(item) ? 'text-emerald-500' : 'text-stone-400'}`}>{isItemActive(item) ? 'Ativo' : 'Inativo'}</span>
                     )}
                 </div>
                 <div className="flex gap-1">
-                    <button onClick={() => handleEdit(item)} className="p-2.5 bg-stone-50 dark:bg-stone-800 text-stone-400 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition-all"><Edit2 size={16} /></button>
-                    <button onClick={() => handleDelete(item.id)} className="p-2.5 bg-stone-50 dark:bg-stone-800 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={16} /></button>
+                    {item.type === 'pizza' && <button onClick={(e) => { e.stopPropagation(); setDetailsItem(item); }} className="px-2.5 py-2 bg-stone-50 dark:bg-stone-800 text-[10px] font-black uppercase text-stone-500 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition-all">Ver detalhes</button>}
+                    <button onClick={(e) => { e.stopPropagation(); handleEdit(item); }} className="p-2.5 bg-stone-50 dark:bg-stone-800 text-stone-400 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition-all"><Edit2 size={16} /></button>
+                    <button onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }} className="p-2.5 bg-stone-50 dark:bg-stone-800 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={16} /></button>
                 </div>
                 </div>
             </div>
@@ -1003,7 +1058,7 @@ const MenuManager: React.FC = () => {
     return (
       <div className="flex flex-col gap-3">
           {items.map(item => (
-              <div key={item.id} className="bg-white dark:bg-stone-900 rounded-3xl border border-stone-100 dark:border-stone-800 p-4 w-full min-w-0 flex flex-col xl:flex-row items-start xl:items-center gap-4 md:gap-6 hover:shadow-lg transition-all group">
+              <div key={item.id} onClick={() => item.type === 'pizza' && setDetailsItem(item)} className={`bg-white dark:bg-stone-900 rounded-3xl border border-stone-100 dark:border-stone-800 p-4 w-full min-w-0 flex flex-col xl:flex-row items-start xl:items-center gap-4 md:gap-6 hover:shadow-lg transition-all group ${item.type === 'pizza' ? 'cursor-pointer' : ''}`}>
                   <div className="w-full sm:w-24 xl:w-20 h-32 sm:h-24 xl:h-20 shrink-0 rounded-2xl overflow-hidden relative">
                         <img src={item.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt={item.name} />
                         <div className="absolute bottom-0 right-0 bg-stone-900/80 text-white text-[8px] px-1.5 py-0.5 rounded-tl-lg font-bold">{item.size}</div>
@@ -1019,6 +1074,15 @@ const MenuManager: React.FC = () => {
                             )}
                       </div>
                       <h3 className="font-black text-stone-800 dark:text-stone-100 uppercase text-sm truncate">{item.name}</h3>
+                      {item.type === 'pizza' && (
+                        <>
+                          <p className="text-[11px] font-bold text-stone-500 dark:text-stone-300">{`${getPizzaSizes(item).length} tamanhos • ${getPizzaFlavorIds(item).length} sabores • ${getPizzaBorders(item).length} bordas`}</p>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {getPizzaSizes(item).slice(0, 4).map((size) => <span key={size.id} className="text-[9px] text-stone-400 font-bold bg-stone-50 dark:bg-stone-800 px-1.5 rounded-md">{size.label}</span>)}
+                            {getPizzaSizes(item).length > 4 && <span className="text-[9px] text-stone-400 font-bold bg-stone-50 dark:bg-stone-800 px-1.5 rounded-md">+{getPizzaSizes(item).length - 4}</span>}
+                          </div>
+                        </>
+                      )}
                       <p className="text-xs text-stone-400 hidden md:block line-clamp-2 break-words">{item.description}</p>
                       {/* Mobile Description */}
                        <p className="text-xs text-stone-400 line-clamp-2 md:hidden mt-1">{item.description}</p>
@@ -1026,21 +1090,24 @@ const MenuManager: React.FC = () => {
 
                   <div className="flex flex-wrap items-center justify-between w-full xl:w-auto xl:flex-nowrap xl:flex-col xl:items-end gap-2 xl:gap-1 xl:px-4 xl:border-l xl:border-r border-stone-100 dark:border-stone-800">
                       <div className="flex flex-col items-start xl:items-end">
-                          <span className="text-sm font-black text-stone-900 dark:text-white">R$ {item.price.toFixed(2)}</span>
+                          <span className="text-sm font-black text-stone-900 dark:text-white">{item.type === 'pizza' ? `A partir de ${formatCurrencyBRL(getStartingPrice(item))}` : formatCurrencyBRL(item.price)}</span>
                           {item.originalPrice && (
-                              <span className="text-[10px] text-stone-400 line-through">R$ {item.originalPrice.toFixed(2)}</span>
+                              <span className="text-[10px] text-stone-400 line-through">{formatCurrencyBRL(item.originalPrice)}</span>
                           )}
+                          {item.type === 'pizza' && <span className={`text-[10px] font-black uppercase ${isItemActive(item) ? 'text-emerald-500' : 'text-stone-400'}`}>{isItemActive(item) ? 'Ativo' : 'Inativo'}</span>}
                       </div>
                       {/* Mobile Actions in the bottom row */}
                       <div className="flex gap-2 xl:hidden">
-                        <button onClick={() => handleEdit(item)} className="p-2.5 bg-stone-50 dark:bg-stone-800 text-stone-400 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition-all"><Edit2 size={16} /></button>
-                        <button onClick={() => handleDelete(item.id)} className="p-2.5 bg-stone-50 dark:bg-stone-800 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={16} /></button>
+                        {item.type === 'pizza' && <button onClick={(e) => { e.stopPropagation(); setDetailsItem(item); }} className="px-2.5 py-2 bg-stone-50 dark:bg-stone-800 text-[10px] font-black uppercase text-stone-500 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition-all">Ver detalhes</button>}
+                        <button onClick={(e) => { e.stopPropagation(); handleEdit(item); }} className="p-2.5 bg-stone-50 dark:bg-stone-800 text-stone-400 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition-all"><Edit2 size={16} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }} className="p-2.5 bg-stone-50 dark:bg-stone-800 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={16} /></button>
                       </div>
                   </div>
 
                   <div className="hidden xl:flex gap-2 pl-2 shrink-0">
-                      <button onClick={() => handleEdit(item)} className="p-2.5 bg-stone-50 dark:bg-stone-800 text-stone-400 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition-all"><Edit2 size={16} /></button>
-                      <button onClick={() => handleDelete(item.id)} className="p-2.5 bg-stone-50 dark:bg-stone-800 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={16} /></button>
+                      {item.type === 'pizza' && <button onClick={(e) => { e.stopPropagation(); setDetailsItem(item); }} className="px-3 py-2 bg-stone-50 dark:bg-stone-800 text-[10px] font-black uppercase text-stone-500 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition-all">Ver detalhes</button>}
+                      <button onClick={(e) => { e.stopPropagation(); handleEdit(item); }} className="p-2.5 bg-stone-50 dark:bg-stone-800 text-stone-400 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition-all"><Edit2 size={16} /></button>
+                      <button onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }} className="p-2.5 bg-stone-50 dark:bg-stone-800 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={16} /></button>
                   </div>
               </div>
           ))}
@@ -1713,6 +1780,118 @@ const MenuManager: React.FC = () => {
               >
                 {confirmModal.confirmLabel || 'Confirmar'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {detailsItem && (
+        <div className="fixed inset-0 bg-stone-950/70 backdrop-blur-sm z-[280] flex items-center justify-center p-4" onClick={() => setDetailsItem(null)}>
+          <div className="w-full max-w-6xl max-h-[90vh] overflow-y-auto rounded-[2rem] bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="sticky top-0 z-10 px-6 py-4 border-b border-stone-100 dark:border-stone-800 bg-white/95 dark:bg-stone-900/95 backdrop-blur flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-500">Detalhes da pizza</p>
+                <h3 className="font-black text-xl text-stone-800 dark:text-white uppercase">{detailsItem.name}</h3>
+                <p className="text-xs text-stone-500">{`${getPizzaSizes(detailsItem).length} tamanhos • ${getPizzaFlavorIds(detailsItem).length} sabores • ${getPizzaBorders(detailsItem).length} bordas`}</p>
+              </div>
+              <button onClick={() => setDetailsItem(null)} className="p-2 rounded-xl bg-stone-100 dark:bg-stone-800 text-stone-500 hover:text-stone-700"><X size={18} /></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Tamanhos</h4>
+                  <div className="space-y-2">
+                    {getPizzaSizes(detailsItem).map((size) => (
+                      <div key={size.id} className="grid grid-cols-4 gap-2 text-xs bg-stone-50 dark:bg-stone-800/40 rounded-xl px-3 py-2">
+                        <span className="font-black text-stone-700 dark:text-stone-200">{size.label}</span>
+                        <span className="text-stone-500">{size.slices || '-'} fatias</span>
+                        <span className="text-stone-500">{size.maxFlavors} sabores</span>
+                        <span className="text-emerald-500 font-bold">Ativo</span>
+                      </div>
+                    ))}
+                    {getPizzaSizes(detailsItem).length === 0 && <p className="text-xs text-stone-400">Nenhum tamanho cadastrado.</p>}
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Sabores</h4>
+                  <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                    {globalPizzaFlavors.filter((flavor) => getPizzaFlavorIds(detailsItem).includes(flavor.id)).map((flavor) => (
+                      <div key={flavor.id} className="text-xs bg-stone-50 dark:bg-stone-800/40 rounded-xl px-3 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-black text-stone-700 dark:text-stone-200">{flavor.name}</span>
+                          <span className={`font-bold ${flavor.active !== false ? 'text-emerald-500' : 'text-stone-400'}`}>{flavor.active !== false ? 'Ativo' : 'Inativo'}</span>
+                        </div>
+                        <p className="text-stone-500">{flavor.flavorType || '—'} • {flavor.category || 'Sem categoria'}</p>
+                        <p className="text-stone-400 line-clamp-1">{flavor.ingredients.map((ingredient) => ingredient.name).join(', ') || 'Sem ingredientes informados'}</p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              </div>
+
+              <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4 overflow-x-auto">
+                <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Preço dos sabores por tamanho</h4>
+                <table className="w-full min-w-[560px] text-xs">
+                  <thead>
+                    <tr className="text-left text-stone-400 uppercase">
+                      <th className="pb-2">Sabor</th>
+                      {getPizzaSizes(detailsItem).map((size) => <th key={size.id} className="pb-2">{size.label}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {globalPizzaFlavors.filter((flavor) => getPizzaFlavorIds(detailsItem).includes(flavor.id)).map((flavor) => (
+                      <tr key={flavor.id} className="border-t border-stone-100 dark:border-stone-800">
+                        <td className="py-2 font-bold text-stone-700 dark:text-stone-200">{flavor.name}</td>
+                        {getPizzaSizes(detailsItem).map((size) => {
+                          const delta = Number(flavor.priceDeltaBySize?.[size.id] ?? flavor.priceDeltaBySize?.[size.label] ?? 0);
+                          const finalPrice = Number(size.basePrice || 0) + (Number.isFinite(delta) ? delta : 0);
+                          return <td key={`${flavor.id}-${size.id}`} className="py-2 text-stone-500">{formatCurrencyBRL(finalPrice)}</td>;
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </section>
+
+              <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4">
+                <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Bordas</h4>
+                <div className="space-y-2">
+                  {getPizzaBorders(detailsItem).map((border, index) => (
+                    <div key={border.id || index} className="grid grid-cols-3 gap-2 text-xs bg-stone-50 dark:bg-stone-800/40 rounded-xl px-3 py-2">
+                      <span className="font-black text-stone-700 dark:text-stone-200">{border.name || border.label || 'Borda sem nome'}</span>
+                      <span className="text-stone-500">{border.type || 'Tipo padrão'}</span>
+                      <span className={`font-bold ${border.active === false ? 'text-stone-400' : 'text-emerald-500'}`}>{border.active === false ? 'Inativo' : 'Ativo'}</span>
+                    </div>
+                  ))}
+                  {getPizzaBorders(detailsItem).length === 0 && <p className="text-xs text-stone-400">Nenhuma borda cadastrada.</p>}
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4 overflow-x-auto">
+                <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Preço das bordas por tamanho</h4>
+                <table className="w-full min-w-[560px] text-xs">
+                  <thead>
+                    <tr className="text-left text-stone-400 uppercase">
+                      <th className="pb-2">Borda</th>
+                      {getPizzaSizes(detailsItem).map((size) => <th key={size.id} className="pb-2">{size.label}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {getPizzaBorders(detailsItem).map((border, index) => (
+                      <tr key={border.id || index} className="border-t border-stone-100 dark:border-stone-800">
+                        <td className="py-2 font-bold text-stone-700 dark:text-stone-200">{border.name || border.label || 'Borda'}</td>
+                        {getPizzaSizes(detailsItem).map((size) => {
+                          const priceBySize = border.priceBySize || border.extraPriceBySize || {};
+                          const value = Number(priceBySize[size.id] ?? priceBySize[size.label] ?? border.extraPrice ?? 0);
+                          return <td key={`${border.id || index}-${size.id}`} className="py-2 text-stone-500">{formatCurrencyBRL(Number.isFinite(value) ? value : 0)}</td>;
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </section>
             </div>
           </div>
         </div>
