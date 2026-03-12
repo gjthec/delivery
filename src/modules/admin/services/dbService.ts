@@ -859,22 +859,16 @@ export const dbGlobalSearch = {
 export const dbPizzaTypes = {
   listPizzaTypes: async (): Promise<PizzaTypeConfig[]> => {
     const localKey = 'platform_pizza_types_v1';
-    const defaults: PizzaTypeConfig[] = [
-      { id: 'pizza-pequena', typeName: 'Pizza Pequena', basePrice: 0, slices: 4, maxFlavors: 1, isActive: true },
-      { id: 'pizza-media', typeName: 'Pizza Média', basePrice: 0, slices: 6, maxFlavors: 2, isActive: true },
-      { id: 'pizza-grande', typeName: 'Pizza Grande', basePrice: 0, slices: 8, maxFlavors: 2, isActive: true },
-      { id: 'pizza-gigante', typeName: 'Pizza Gigante', basePrice: 0, slices: 12, maxFlavors: 3, isActive: true }
-    ];
 
     const normalize = (item: Partial<PizzaTypeConfig>): PizzaTypeConfig | null => {
-      const typeName = item.typeName;
-      if (typeName !== 'Pizza Pequena' && typeName !== 'Pizza Média' && typeName !== 'Pizza Grande' && typeName !== 'Pizza Gigante') return null;
+      const typeName = String(item.typeName || '').trim();
+      if (!typeName) return null;
       return {
         id: String(item.id || typeName.toLowerCase().replace(/\s+/g, '-')).trim(),
         typeName,
         basePrice: Math.max(0, Number(item.basePrice || 0)),
         slices: Math.max(1, Number(item.slices || 1)),
-        maxFlavors: Math.max(1, Math.min(4, Number(item.maxFlavors || 1))),
+        maxFlavors: Math.max(1, Math.min(8, Number(item.maxFlavors || 1))),
         isActive: item.isActive !== false,
         createdAt: item.createdAt,
         updatedAt: item.updatedAt
@@ -888,13 +882,8 @@ export const dbPizzaTypes = {
           .map((docSnap) => normalize({ id: docSnap.id, ...(docSnap.data() as Partial<PizzaTypeConfig>) }))
           .filter((item): item is PizzaTypeConfig => Boolean(item));
 
-        const ensured = defaults.map((def) => items.find((item) => item.typeName === def.typeName) || def);
-        for (const item of ensured) {
-          await setDoc(doc(db, ...ROOT_PATH, 'catalog', 'pizzaTypes', item.id), sanitizeData(item), { merge: true });
-        }
-
-        setLocal(localKey, ensured);
-        return ensured;
+        setLocal(localKey, items);
+        return items;
       } catch (error) {
         console.warn('Firestore error on pizza types, falling back to local:', error);
       }
@@ -905,14 +894,8 @@ export const dbPizzaTypes = {
       .map((item) => normalize(item))
       .filter((item): item is PizzaTypeConfig => Boolean(item));
 
-    if (!normalizedLocal.length) {
-      setLocal(localKey, defaults);
-      return defaults;
-    }
-
-    const ensuredLocal = defaults.map((def) => normalizedLocal.find((item) => item.typeName === def.typeName) || def);
-    setLocal(localKey, ensuredLocal);
-    return ensuredLocal;
+    setLocal(localKey, normalizedLocal);
+    return normalizedLocal;
   },
   createPizzaType: async (pizzaType: PizzaTypeConfig): Promise<void> => {
     const payload = sanitizeData({ ...pizzaType, isActive: pizzaType.isActive !== false, updatedAt: new Date().toISOString(), createdAt: pizzaType.createdAt || new Date().toISOString() });
