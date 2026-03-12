@@ -35,7 +35,6 @@ if (IS_FIREBASE_ENABLED && firebaseConfig.apiKey !== 'SUA_API_KEY' && firebaseCo
 
 export type PizzaDetailsSnapshot = {
   selectedPizza: MenuItem | null;
-  pizzas: MenuItem[];
 };
 // Caminho raiz para organização dos dados
 const ROOT_PATH = tenantPathSegments();
@@ -164,61 +163,31 @@ export const dbMenu = {
   },
   subscribePizzaDetails: (pizzaId: string, onData: (data: PizzaDetailsSnapshot) => void, onError?: (error: Error) => void) => {
     if (!pizzaId) {
-      onData({ selectedPizza: null, pizzas: [] });
+      onData({ selectedPizza: null });
       return () => undefined;
     }
 
     if (!db) {
-      dbMenu.getAll()
-        .then((items) => {
-          const pizzas = items.filter((item) => item.category === 'Pizzas');
-          const selectedPizza = items.find((item) => item.id === pizzaId) || null;
-          onData({ selectedPizza, pizzas });
-        })
+      dbMenu.getById(pizzaId)
+        .then((selectedPizza) => onData({ selectedPizza }))
         .catch((error) => onError?.(error as Error));
       return () => undefined;
     }
 
-    let latestSnapshot: PizzaDetailsSnapshot = { selectedPizza: null, pizzas: [] };
-
-    const emit = (next: Partial<PizzaDetailsSnapshot>) => {
-      latestSnapshot = {
-        selectedPizza: next.selectedPizza !== undefined ? next.selectedPizza : latestSnapshot.selectedPizza,
-        pizzas: next.pizzas !== undefined ? next.pizzas : latestSnapshot.pizzas
-      };
-      onData(latestSnapshot);
-    };
-
-    const unsubscribeList = onSnapshot(
-      query(collection(db, ...ROOT_PATH, 'menu'), where('category', '==', 'Pizzas')),
-      (snapshot) => {
-        const pizzas = snapshot.docs
-          .map((snapshotDoc) => ({ ...snapshotDoc.data(), id: snapshotDoc.id } as MenuItem))
-          .filter((item) => {
-            const storeId = (item as MenuItem & { storeId?: string }).storeId;
-            return !storeId || storeId === ROOT_PATH[1];
-          });
-
-        emit({ selectedPizza: pizzas.find((pizza) => pizza.id === pizzaId) || latestSnapshot.selectedPizza, pizzas });
-      },
-      (error) => onError?.(error as Error)
-    );
-
     const unsubscribeSelected = onSnapshot(
       doc(db, ...ROOT_PATH, 'menu', pizzaId),
       (snapshotDoc) => {
-        if (!snapshotDoc.exists()) return;
+        if (!snapshotDoc.exists()) {
+          onData({ selectedPizza: null });
+          return;
+        }
         const selectedPizza = { ...snapshotDoc.data(), id: snapshotDoc.id } as MenuItem;
-        const nextPizzas = latestSnapshot.pizzas.some((pizza) => pizza.id === selectedPizza.id)
-          ? latestSnapshot.pizzas.map((pizza) => (pizza.id === selectedPizza.id ? selectedPizza : pizza))
-          : [selectedPizza, ...latestSnapshot.pizzas];
-        emit({ selectedPizza, pizzas: nextPizzas });
+        onData({ selectedPizza });
       },
       (error) => onError?.(error as Error)
     );
 
     return () => {
-      unsubscribeList();
       unsubscribeSelected();
     };
   },
