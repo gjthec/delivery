@@ -1094,6 +1094,44 @@ export const dbPizzaFlavors = {
 };
 
 
+
+
+type PizzaBorder = {
+  id: string;
+  name: string;
+  active?: boolean;
+  isActive?: boolean;
+  priceDeltaBySize?: Record<string, number> | null;
+  extraPrice?: number | null;
+};
+
+export const dbPizzaBorders = {
+  getAll: async (): Promise<PizzaBorder[]> => {
+    if (!db) {
+      return [];
+    }
+
+    try {
+      const snapshot = await getDocs(collection(db, ...ROOT_PATH, 'pizzaBorders'));
+      return snapshot.docs.map((docSnap) => {
+        const payload = docSnap.data() as PizzaBorder;
+        return {
+          ...payload,
+          id: docSnap.id,
+          name: String(payload.name || '').trim(),
+          active: payload.active !== false,
+          isActive: payload.isActive !== false,
+          priceDeltaBySize: payload.priceDeltaBySize || null,
+          extraPrice: typeof payload.extraPrice === 'number' ? payload.extraPrice : null
+        };
+      }).filter((item) => item.name);
+    } catch (error) {
+      console.warn('Firestore error on pizza borders:', error);
+      return [];
+    }
+  }
+};
+
 export const dbIngredientsCatalog = {
   getAll: async (): Promise<Ingredient[]> => {
     const localKey = 'platform_catalog_ingredients_v1';
