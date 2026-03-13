@@ -13,10 +13,13 @@ import {
   deleteDoc,
   updateDoc,
   query,
+  where,
   orderBy,
   limit,
   onSnapshot,
-  serverTimestamp
+  serverTimestamp,
+  arrayUnion,
+  arrayRemove
 } from 'firebase/firestore';
 
 // Inicialização segura do Firebase
@@ -29,6 +32,19 @@ if (IS_FIREBASE_ENABLED && firebaseConfig.apiKey !== 'SUA_API_KEY' && firebaseCo
     console.error('Erro ao inicializar Firebase:', error);
   }
 }
+
+
+
+export type PizzaDetailsSnapshot = {
+  selectedPizza: MenuItem | null;
+};
+
+type PizzaExtraPayload = {
+  name: string;
+  price?: number;
+  type: 'pizza' | 'borda';
+  priceBySize?: Record<string, number>;
+};
 
 // Caminho raiz para organização dos dados
 const ROOT_PATH = tenantPathSegments();
@@ -93,6 +109,23 @@ const setLocal = (key: string, data: any) => {
 
 // --- SERVIÇO DE CARDÁPIO ---
 export const dbMenu = {
+  getById: async (id: string): Promise<MenuItem | null> => {
+    if (!id) return null;
+
+    if (db) {
+      try {
+        const snapshot = await getDoc(doc(db, ...ROOT_PATH, 'menu', id));
+        if (snapshot.exists()) {
+          return { ...snapshot.data(), id: snapshot.id } as MenuItem;
+        }
+      } catch (e) {
+        console.warn('Firestore error on menu item lookup, falling back to local:', e);
+      }
+    }
+
+    const items = getLocal<MenuItem[]>(KEYS.MENU, []);
+    return items.find((item) => item.id === id) || null;
+  },
   getAll: async (): Promise<MenuItem[]> => {
     if (db) {
       try {
@@ -137,6 +170,68 @@ export const dbMenu = {
     const items = await dbMenu.getAll();
     const updated = items.filter((i) => i.id !== id);
     setLocal(KEYS.MENU, updated);
+  },
+  subscribePizzaDetails: (pizzaId: string, onData: (data: PizzaDetailsSnapshot) => void, onError?: (error: Error) => void) => {
+    if (!pizzaId) {
+      onData({ selectedPizza: null });
+      return () => undefined;
+    }
+
+    if (!db) {
+      dbMenu.getById(pizzaId)
+        .then((selectedPizza) => onData({ selectedPizza }))
+        .catch((error) => onError?.(error as Error));
+      return () => undefined;
+    }
+
+    const unsubscribeSelected = onSnapshot(
+      doc(db, ...ROOT_PATH, 'menu', pizzaId),
+      (snapshotDoc) => {
+        if (!snapshotDoc.exists()) {
+          onData({ selectedPizza: null });
+          return;
+        }
+        const selectedPizza = { ...snapshotDoc.data(), id: snapshotDoc.id } as MenuItem;
+        onData({ selectedPizza });
+      },
+      (error) => onError?.(error as Error)
+    );
+
+    return () => {
+      unsubscribeSelected();
+    };
+  },
+  updateActiveStatus: async (id: string, active: boolean): Promise<void> => {
+    if (db) {
+      await updateDoc(doc(db, ...ROOT_PATH, 'menu', id), { active });
+      return;
+    }
+
+    const items = await dbMenu.getAll();
+    const updated = items.map((item) => (item.id === id ? { ...item, active } : item));
+    setLocal(KEYS.MENU, updated);
+  },
+  addPizzaExtra: async (pizzaId: string, extra: PizzaExtraPayload): Promise<void> => {
+    if (!db) throw new Error('Firestore indisponível para salvar extras da pizza.');
+    await updateDoc(doc(db, ...ROOT_PATH, 'menu', pizzaId), {
+      extras: arrayUnion(sanitizeData({
+        name: extra.name,
+        type: extra.type,
+        price: typeof extra.price === 'number' ? Number(extra.price || 0) : undefined,
+        priceBySize: extra.priceBySize || undefined
+      }))
+    });
+  },
+  removePizzaExtra: async (pizzaId: string, extra: PizzaExtraPayload): Promise<void> => {
+    if (!db) throw new Error('Firestore indisponível para remover extras da pizza.');
+    await updateDoc(doc(db, ...ROOT_PATH, 'menu', pizzaId), {
+      extras: arrayRemove(sanitizeData({
+        name: extra.name,
+        type: extra.type,
+        price: typeof extra.price === 'number' ? Number(extra.price || 0) : undefined,
+        priceBySize: extra.priceBySize || undefined
+      }))
+    });
   }
 };
 
@@ -877,7 +972,7 @@ export const dbPizzaTypes = {
 
     if (db) {
       try {
-        const snapshot = await getDocs(collection(db, ...ROOT_PATH, 'catalog', 'pizzaTypes'));
+        const snapshot = await getDocs(collection(db, ...ROOT_PATH, 'pizzaTypes'));
         const items = snapshot.docs
           .map((docSnap) => normalize({ id: docSnap.id, ...(docSnap.data() as Partial<PizzaTypeConfig>) }))
           .filter((item): item is PizzaTypeConfig => Boolean(item));
@@ -901,7 +996,7 @@ export const dbPizzaTypes = {
     const payload = sanitizeData({ ...pizzaType, isActive: pizzaType.isActive !== false, updatedAt: new Date().toISOString(), createdAt: pizzaType.createdAt || new Date().toISOString() });
     if (db) {
       try {
-        await setDoc(doc(db, ...ROOT_PATH, 'catalog', 'pizzaTypes', payload.id), payload);
+        await setDoc(doc(db, ...ROOT_PATH, 'pizzaTypes', payload.id), payload);
       } catch (error) {
         console.error('Error creating pizza type:', error);
       }
@@ -925,42 +1020,40 @@ export const dbPizzaTypes = {
 
 export const dbPizzaFlavors = {
   getAll: async (): Promise<PizzaFlavor[]> => {
-    const localKey = 'platform_pizza_flavors_v1';
-    if (db) {
-      try {
-        const snapshot = await getDocs(collection(db, ...ROOT_PATH, 'catalog', 'pizzaFlavors'));
-        const items: PizzaFlavor[] = [];
-        snapshot.forEach((docSnap) => {
-          const payload = docSnap.data() as PizzaFlavor & { isActive?: boolean; category?: string };
-          const normalizedActive = typeof payload.active === 'boolean'
-            ? payload.active
-            : (typeof payload.isActive === 'boolean' ? payload.isActive : true);
-          items.push({
-            ...payload,
-            id: docSnap.id,
-            category: payload.category || (payload.flavorType === 'Doce' ? 'doce' : 'salgada'),
-            tags: Array.isArray(payload.tags) ? payload.tags : [],
-            ingredients: Array.isArray(payload.ingredients)
-              ? payload.ingredients.filter((ing) => ing && typeof ing === 'object' && String((ing as { id?: string }).id || '').trim() && String((ing as { name?: string }).name || '').trim()) as Array<{ id: string; name: string }>
-              : [],
-            active: normalizedActive,
-            isActive: normalizedActive,
-            priceDeltaBySize: payload.priceDeltaBySize || null,
-            extraPrice: typeof payload.extraPrice === 'number' ? payload.extraPrice : null,
-            flavorType: payload.flavorType === 'Doce' ? 'Doce' : 'Salgado'
-          });
-        });
-        setLocal(localKey, items);
-        return items;
-      } catch (e) {
-        console.warn('Firestore error on pizza flavors, falling back to local:', e);
-      }
+    if (!db) {
+      throw new Error('Firestore indisponível para leitura de sabores.');
     }
 
-    return getLocal(localKey, []);
+    const snapshot = await getDocs(collection(db, ...ROOT_PATH, 'pizzaFlavors'));
+    const items: PizzaFlavor[] = [];
+    snapshot.forEach((docSnap) => {
+      const payload = docSnap.data() as PizzaFlavor & { isActive?: boolean; category?: string };
+      const normalizedActive = typeof payload.active === 'boolean'
+        ? payload.active
+        : (typeof payload.isActive === 'boolean' ? payload.isActive : true);
+      items.push({
+        ...payload,
+        id: docSnap.id,
+        category: payload.category || (payload.flavorType === 'Doce' ? 'doce' : 'salgada'),
+        tags: Array.isArray(payload.tags) ? payload.tags : [],
+        ingredients: Array.isArray(payload.ingredients)
+          ? payload.ingredients.filter((ing) => ing && typeof ing === 'object' && String((ing as { id?: string }).id || '').trim() && String((ing as { name?: string }).name || '').trim()) as Array<{ id: string; name: string }>
+          : [],
+        active: normalizedActive,
+        isActive: normalizedActive,
+        priceDeltaBySize: payload.priceDeltaBySize || null,
+        extraPrice: typeof payload.extraPrice === 'number' ? payload.extraPrice : null,
+        flavorType: payload.flavorType === 'Doce' ? 'Doce' : 'Salgado'
+      });
+    });
+
+    return items;
   },
   save: async (item: PizzaFlavor): Promise<void> => {
-    const localKey = 'platform_pizza_flavors_v1';
+    if (!db) {
+      throw new Error('Firestore indisponível para salvar sabores.');
+    }
+
     const active = item.active !== false;
     const now = new Date().toISOString();
     const sanitized = sanitizeData({
@@ -977,20 +1070,7 @@ export const dbPizzaFlavors = {
       flavorType: item.flavorType === 'Doce' ? 'Doce' : 'Salgado'
     });
 
-    if (db) {
-      try {
-        await setDoc(doc(db, ...ROOT_PATH, 'catalog', 'pizzaFlavors', sanitized.id), sanitized);
-      } catch (e) {
-        console.error('Error saving pizza flavor to Firestore:', e);
-      }
-    }
-
-    const current = getLocal<PizzaFlavor[]>(localKey, []);
-    const index = current.findIndex((i) => i.id === sanitized.id);
-    const updated = index >= 0
-      ? current.map((i) => (i.id === sanitized.id ? sanitized : i))
-      : [sanitized, ...current];
-    setLocal(localKey, updated);
+    await setDoc(doc(db, ...ROOT_PATH, 'pizzaFlavors', sanitized.id), sanitized);
   },
   createFlavor: async (item: PizzaFlavor): Promise<void> => {
     await dbPizzaFlavors.save(item);
@@ -1005,19 +1085,52 @@ export const dbPizzaFlavors = {
     await dbPizzaFlavors.save({ ...target, active: isActive, isActive, updatedAt: new Date().toISOString() });
   },
   delete: async (id: string): Promise<void> => {
-    const localKey = 'platform_pizza_flavors_v1';
-    if (db) {
-      try {
-        await deleteDoc(doc(db, ...ROOT_PATH, 'catalog', 'pizzaFlavors', id));
-      } catch (e) {
-        console.error('Error deleting pizza flavor from Firestore:', e);
-      }
+    if (!db) {
+      throw new Error('Firestore indisponível para remover sabores.');
     }
-    const current = getLocal<PizzaFlavor[]>(localKey, []);
-    setLocal(localKey, current.filter((i) => i.id !== id));
+
+    await deleteDoc(doc(db, ...ROOT_PATH, 'pizzaFlavors', id));
   }
 };
 
+
+
+
+type PizzaBorder = {
+  id: string;
+  name: string;
+  active?: boolean;
+  isActive?: boolean;
+  priceDeltaBySize?: Record<string, number> | null;
+  extraPrice?: number | null;
+};
+
+export const dbPizzaBorders = {
+  getAll: async (): Promise<PizzaBorder[]> => {
+    if (!db) {
+      return [];
+    }
+
+    try {
+      const snapshot = await getDocs(collection(db, ...ROOT_PATH, 'pizzaBorders'));
+      return snapshot.docs.map((docSnap) => {
+        const payload = docSnap.data() as PizzaBorder;
+        return {
+          ...payload,
+          id: docSnap.id,
+          name: String(payload.name || '').trim(),
+          active: payload.active !== false,
+          isActive: payload.isActive !== false,
+          priceDeltaBySize: payload.priceDeltaBySize || null,
+          extraPrice: typeof payload.extraPrice === 'number' ? payload.extraPrice : null
+        };
+      }).filter((item) => item.name);
+    } catch (error) {
+      console.warn('Firestore error on pizza borders:', error);
+      return [];
+    }
+  }
+};
 
 export const dbIngredientsCatalog = {
   getAll: async (): Promise<Ingredient[]> => {

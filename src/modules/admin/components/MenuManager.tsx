@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MenuItem, ExtraItem, Coupon, PizzaFlavor, PizzaSizeOption } from '../types';
 import { improveMenuItem } from '../services/aiService'; // Adjusted path
-import { dbMenu, dbCatalog, dbCoupons, dbPizzaFlavors, dbSettings } from '../services/dbService'; // Adjusted path
+import { dbMenu, dbCatalog, dbCoupons, dbPizzaFlavors, dbPizzaBorders, dbSettings } from '../services/dbService'; // Adjusted path
 import { 
   Plus, Edit2, Trash2, X, Sparkles, RefreshCw,
   Image as ImageIcon, Tag, List, PlusCircle, MinusCircle, DollarSign,
@@ -34,6 +34,14 @@ const EMPTY_FLAVOR_DRAFT: FlavorDraft = {
 };
 
 
+
+type PizzaExtraEntry = {
+  name: string;
+  price: number;
+  type?: string;
+};
+
+
 const MenuManager: React.FC = () => {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<string[]>(INITIAL_CATEGORIES.map(c => c.name));
@@ -42,6 +50,7 @@ const MenuManager: React.FC = () => {
   const [globalTags, setGlobalTags] = useState<string[]>([]);
   const [globalIngredients, setGlobalIngredients] = useState<string[]>([]);
   const [globalPizzaFlavors, setGlobalPizzaFlavors] = useState<PizzaFlavor[]>([]);
+  const [globalPizzaBorders, setGlobalPizzaBorders] = useState<PizzaBorderRecord[]>([]);
   const [pizzaFlavorQuery, setPizzaFlavorQuery] = useState('');
   const [pizzaFlavorTypeFilter, setPizzaFlavorTypeFilter] = useState<FlavorTypeFilter>('Todos');
 
@@ -110,6 +119,11 @@ const MenuManager: React.FC = () => {
   const modalBodyRef = useRef<HTMLDivElement | null>(null);
   const [showScrollToType, setShowScrollToType] = useState(false);
   const [detailsItem, setDetailsItem] = useState<MenuItem | null>(null);
+  const [pizzaDetailsData, setPizzaDetailsData] = useState<{ selectedPizza: MenuItem | null }>({ selectedPizza: null });
+  const [pizzaDetailsLoading, setPizzaDetailsLoading] = useState(false);
+  const [pizzaDetailsError, setPizzaDetailsError] = useState<string | null>(null);
+  const [originalCategory, setOriginalCategory] = useState<string | null>(null);
+  const [originalItemId, setOriginalItemId] = useState<string | null>(null);
 
   const openAlert = (message: string, title: string = 'Atenção') => {
     setAlertModal({ title, message });
@@ -154,6 +168,7 @@ const MenuManager: React.FC = () => {
       await Promise.all([
         loadCatalogs(menuData),
         loadPizzaFlavors(),
+        loadPizzaBorders(),
         loadCoupons(),
         loadSettings(),
       ]);
@@ -161,6 +176,32 @@ const MenuManager: React.FC = () => {
 
     loadInitialData();
   }, []);
+
+  useEffect(() => {
+    if (!detailsItem || detailsItem.type !== 'pizza') {
+      setPizzaDetailsLoading(false);
+      setPizzaDetailsError(null);
+      setPizzaDetailsData({ selectedPizza: null });
+      return;
+    }
+
+    setPizzaDetailsLoading(true);
+    setPizzaDetailsError(null);
+
+    const unsubscribe = dbMenu.subscribePizzaDetails(
+      detailsItem.id,
+      (payload) => {
+        setPizzaDetailsData(payload);
+        setPizzaDetailsLoading(false);
+      },
+      () => {
+        setPizzaDetailsError('Não foi possível carregar os dados da pizza em tempo real.');
+        setPizzaDetailsLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [detailsItem]);
 
   // Garante que o form inicie com uma categoria válida
   useEffect(() => {
@@ -199,6 +240,11 @@ const MenuManager: React.FC = () => {
   const loadPizzaFlavors = async () => {
     const data = await dbPizzaFlavors.getAll();
     setGlobalPizzaFlavors(data.sort((a, b) => a.name.localeCompare(b.name)));
+  };
+
+  const loadPizzaBorders = async () => {
+    const data = await dbPizzaBorders.getAll();
+    setGlobalPizzaBorders(data.sort((a, b) => a.name.localeCompare(b.name)));
   };
 
   const loadCatalogs = async (menuData: MenuItem[]) => {
@@ -360,11 +406,45 @@ const MenuManager: React.FC = () => {
     return Math.min(...sizes.map((size) => Number(size.basePrice || 0)));
   };
 
-  const handleEdit = (item: MenuItem) => {
-    if (item.type === 'pizza') {
-      setEditingPizzaBase(item);
+  const selectedPizzaDetails = pizzaDetailsData.selectedPizza || detailsItem;
+  const onlyActive = <T extends Record<string, any>>(items: T[]) => items.filter((item) => item?.active !== false && item?.isActive !== false);
+  const selectedSizesSource = ((selectedPizzaDetails as MenuItem & { sizes?: PizzaSizeOption[]; pizzaTypes?: Array<Record<string, any>> } | null)?.sizes
+    || (selectedPizzaDetails as MenuItem & { pizzaTypes?: Array<Record<string, any>> } | null)?.pizzaTypes
+    || []) as Array<Record<string, any>>;
+  const selectedSizes = selectedSizesSource.map((size, index) => ({
+    ...size,
+    id: String(size?.id || `size-${index}`),
+    label: String(size?.label || size?.typeName || `Tamanho ${index + 1}`),
+    maxFlavors: Number.isFinite(Number(size?.maxFlavors)) ? Number(size.maxFlavors) : Number(size?.flavors || 0),
+    slices: typeof size?.slices === 'number' ? size.slices : (Number.isFinite(Number(size?.slices)) ? Number(size.slices) : null)
+  }));
+
+  const selectedFlavorIds = new Set(((selectedPizzaDetails?.allowedFlavorIds || []) as string[]).map((id) => String(id)));
+  const flavorRows = onlyActive(globalPizzaFlavors).filter((flavor) => selectedFlavorIds.has(flavor.id));
+  const borderRows = onlyActive(globalPizzaBorders);
+
+  const activeLabel = (selectedPizzaDetails as MenuItem & { active?: boolean } | null)?.active !== false ? 'Ativo' : 'Inativo';
+
+  const resolvePriceBySize = (item: { priceDeltaBySize?: Record<string, number> | null; extraPrice?: number | null }, size: PizzaSizeOption) => {
+    const bySize = item.priceDeltaBySize || {};
+    const candidate = Number(bySize[size.id]);
+    if (Number.isFinite(candidate)) return candidate;
+    const fallback = Number(item.extraPrice ?? NaN);
+    if (Number.isFinite(fallback)) return fallback;
+    return null;
+  };
+
+  const handleEdit = async (item: MenuItem) => {
+    const persistedItem = await dbMenu.getById(item.id);
+    const sourceItem = persistedItem || item;
+
+    setOriginalCategory(sourceItem.category || null);
+    setOriginalItemId(sourceItem.id || null);
+
+    if (sourceItem.type === 'pizza') {
+      setEditingPizzaBase(sourceItem);
       setNewItemType('pizza');
-      setEditingId(item.id);
+      setEditingId(sourceItem.id);
       setIsModalOpen(true);
       return;
     }
@@ -372,41 +452,41 @@ const MenuManager: React.FC = () => {
     setEditingPizzaBase(null);
     setNewItemType('normal');
     setFormData({
-      name: item.name,
-      category: item.category,
-      price: item.price.toString(),
-      costPrice: item.costPrice?.toString() || '',
-      originalPrice: item.originalPrice?.toString() || '',
-      description: item.description,
-      imageUrl: item.imageUrl,
-      imagePublicId: item.imagePublicId || '',
-      size: item.size,
-      tags: [...item.tags],
-      ingredients: [...item.ingredients],
-      extras: [...item.extras],
-      type: item.type || 'regular',
-      pricingStrategy: item.pricingStrategy || 'highestFlavor',
-      sizes: item.sizes || []
+      name: sourceItem.name,
+      category: sourceItem.category,
+      price: sourceItem.price.toString(),
+      costPrice: sourceItem.costPrice?.toString() || '',
+      originalPrice: sourceItem.originalPrice?.toString() || '',
+      description: sourceItem.description,
+      imageUrl: sourceItem.imageUrl,
+      imagePublicId: sourceItem.imagePublicId || '',
+      size: sourceItem.size,
+      tags: [...sourceItem.tags],
+      ingredients: [...sourceItem.ingredients],
+      extras: [...sourceItem.extras],
+      type: sourceItem.type || 'regular',
+      pricingStrategy: sourceItem.pricingStrategy || 'highestFlavor',
+      sizes: sourceItem.sizes || []
     });
-    setEditingId(item.id);
-    setLocalImagePreview(item.imageUrl || '');
+    setEditingId(sourceItem.id);
+    setLocalImagePreview(sourceItem.imageUrl || '');
     setImageUploadError(null);
     setNormalBaseline(getNormalSnapshot({
-      name: item.name,
-      category: item.category,
-      price: item.price.toString(),
-      costPrice: item.costPrice?.toString() || '',
-      originalPrice: item.originalPrice?.toString() || '',
-      description: item.description,
-      imageUrl: item.imageUrl,
-      imagePublicId: item.imagePublicId || '',
-      size: item.size,
-      tags: [...item.tags],
-      ingredients: [...item.ingredients],
-      extras: [...item.extras],
-      type: item.type || 'regular',
-      pricingStrategy: item.pricingStrategy || 'highestFlavor',
-      sizes: item.sizes || []
+      name: sourceItem.name,
+      category: sourceItem.category,
+      price: sourceItem.price.toString(),
+      costPrice: sourceItem.costPrice?.toString() || '',
+      originalPrice: sourceItem.originalPrice?.toString() || '',
+      description: sourceItem.description,
+      imageUrl: sourceItem.imageUrl,
+      imagePublicId: sourceItem.imagePublicId || '',
+      size: sourceItem.size,
+      tags: [...sourceItem.tags],
+      ingredients: [...sourceItem.ingredients],
+      extras: [...sourceItem.extras],
+      type: sourceItem.type || 'regular',
+      pricingStrategy: sourceItem.pricingStrategy || 'highestFlavor',
+      sizes: sourceItem.sizes || []
     }));
     setDirtyNormal(false);
     setIsModalOpen(true);
@@ -480,10 +560,22 @@ const MenuManager: React.FC = () => {
       }
     }
 
+    if (editingId && originalCategory && formData.category !== originalCategory) {
+      console.error('[MenuManager] Tentativa bloqueada de alteração de categoria.', { editingId, originalCategory, submitted: formData.category });
+      openAlert('Este campo não pode ser alterado após a criação.');
+      return;
+    }
+
+    if (editingId && originalItemId && editingId !== originalItemId) {
+      console.error('[MenuManager] Tentativa bloqueada de alteração de ID.', { editingId, originalItemId });
+      openAlert('Não foi possível salvar: identificador inválido.');
+      return;
+    }
+
     const payload: MenuItem = {
       id: editingId || `b-${Date.now()}`,
       name: formData.name,
-      category: formData.category,
+      category: editingId && originalCategory ? originalCategory : formData.category,
       price: formData.type === 'pizza' ? (formData.sizes[0]?.basePrice || 0) : parseFloat(formData.price),
       costPrice: formData.costPrice ? parseFloat(formData.costPrice) : undefined,
       originalPrice: formData.originalPrice ? parseFloat(formData.originalPrice) : undefined,
@@ -538,6 +630,8 @@ const MenuManager: React.FC = () => {
     setDirtyNormal(false);
     setDirtyPizza(false);
     setNormalBaseline('');
+    setOriginalCategory(null);
+    setOriginalItemId(null);
     setIsAddingCategory(false);
     setNewCategoryName('');
     setImageUploadError(null);
@@ -998,56 +1092,41 @@ const MenuManager: React.FC = () => {
   const renderItemsContainer = (items: MenuItem[]) => {
     if (viewMode === 'grid') {
       return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-6 justify-items-center">
             {items.map(item => (
-            <div key={item.id} onClick={() => item.type === 'pizza' && setDetailsItem(item)} className={`bg-white dark:bg-stone-900 rounded-[2.5rem] border border-stone-100 dark:border-stone-800 p-5 group shadow-sm hover:shadow-xl transition-all relative overflow-hidden ${item.type === 'pizza' ? 'cursor-pointer' : ''}`}>
-                <div className="relative h-44 rounded-[1.5rem] overflow-hidden mb-5">
-                <img src={item.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt={item.name} />
-                <div className="absolute top-3 left-3 flex gap-1">
-                    {item.tags.slice(0, 2).map(t => (
-                    <span key={t} className="bg-white/90 backdrop-blur px-2 py-1 rounded-lg text-[8px] font-black uppercase text-orange-600">{t}</span>
-                    ))}
+            <div key={item.id} onClick={() => item.type === 'pizza' && setDetailsItem(item)} className={`w-[220px] bg-[#1a1a1a] rounded-2xl border border-[#2a2a2a] group shadow-sm hover:shadow-lg transition-all relative overflow-hidden flex flex-col ${item.type === 'pizza' ? 'cursor-pointer' : ''}`}>
+                <div className="relative h-[130px] overflow-hidden">
+                <img src={item.imageUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt={item.name} />
+                <div className="absolute top-2 left-2">
+                    <span className="bg-[#ff6b35] text-white px-2.5 py-1 rounded-md text-[9px] font-bold uppercase tracking-wide">{item.category}</span>
                 </div>
-                <div className="absolute bottom-3 right-3">
-                    <span className="bg-stone-900 text-white px-2 py-1 rounded-lg text-[10px] font-black uppercase">{item.size}</span>
+                <div className="absolute bottom-2 right-2">
+                    <span className="bg-black/50 backdrop-blur-sm text-white px-2 py-1 rounded-md text-[10px] font-semibold uppercase">{item.type === 'pizza' ? `${getPizzaSizes(item).length} tam.` : item.size}</span>
                 </div>
                 </div>
-                <div className="space-y-1 mb-4">
-                <span className="text-[10px] font-black text-orange-500 uppercase tracking-widest">{item.category}</span>
-                <h3 className="font-black text-stone-800 dark:text-stone-100 uppercase text-xs truncate leading-tight">{item.name}</h3>
-                {item.type === 'pizza' && (
-                  <>
-                    <div className="text-[11px] font-bold text-stone-500 dark:text-stone-300">
-                      {`${getPizzaSizes(item).length} tamanhos • ${getPizzaFlavorIds(item).length} sabores • ${getPizzaBorders(item).length} bordas`}
+                <div className="px-3.5 pt-3 pb-2 flex-1 flex flex-col gap-2">
+                  <span className="text-[10px] text-[#ff6b35] uppercase tracking-[0.12em] font-semibold">{item.category}</span>
+                  <h3 className="text-white text-[14px] font-medium leading-tight line-clamp-2">{item.name}</h3>
+                  <p className="text-[#888888] text-[11px]">
+                    {item.type === 'pizza'
+                      ? `${getPizzaSizes(item).length} tamanhos • ${getPizzaFlavorIds(item).length} sabores • ${getPizzaBorders(item).length} bordas`
+                      : (item.description || 'Item do cardápio')}
+                  </p>
+                  {item.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      {item.tags.slice(0, 3).map((tag) => (
+                        <span key={tag} className="px-2 py-1 rounded-md text-[10px] text-stone-300 bg-[#2a2a2a]">
+                          {tag}
+                        </span>
+                      ))}
                     </div>
-                    {getPizzaSizes(item).length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {getPizzaSizes(item).slice(0, 4).map((size) => (
-                          <span key={size.id} className="text-[9px] text-stone-400 font-bold bg-stone-50 dark:bg-stone-800 px-1.5 py-0.5 rounded-md">{size.label}</span>
-                        ))}
-                        {getPizzaSizes(item).length > 4 && (
-                          <span className="text-[9px] text-stone-400 font-bold bg-stone-50 dark:bg-stone-800 px-1.5 py-0.5 rounded-md">+{getPizzaSizes(item).length - 4}</span>
-                        )}
-                      </div>
-                    )}
-                  </>
-                )}
+                  )}
                 </div>
-                <div className="flex justify-between items-center pt-4 border-t border-stone-50 dark:border-stone-800">
-                <div className="flex flex-col">
-                    <span className="text-sm font-black text-stone-900 dark:text-white">{item.type === 'pizza' ? `A partir de ${formatCurrencyBRL(getStartingPrice(item))}` : formatCurrencyBRL(item.price)}</span>
-                    {item.originalPrice && (
-                    <span className="text-[10px] text-stone-400 line-through">{formatCurrencyBRL(item.originalPrice)}</span>
-                    )}
-                    {item.type === 'pizza' && (
-                      <span className={`mt-1 text-[10px] font-black uppercase ${isItemActive(item) ? 'text-emerald-500' : 'text-stone-400'}`}>{isItemActive(item) ? 'Ativo' : 'Inativo'}</span>
-                    )}
-                </div>
-                <div className="flex gap-1">
-                    {item.type === 'pizza' && <button onClick={(e) => { e.stopPropagation(); setDetailsItem(item); }} className="px-2.5 py-2 bg-stone-50 dark:bg-stone-800 text-[10px] font-black uppercase text-stone-500 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition-all">Ver detalhes</button>}
-                    <button onClick={(e) => { e.stopPropagation(); handleEdit(item); }} className="p-2.5 bg-stone-50 dark:bg-stone-800 text-stone-400 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition-all"><Edit2 size={16} /></button>
-                    <button onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }} className="p-2.5 bg-stone-50 dark:bg-stone-800 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={16} /></button>
-                </div>
+                <div className="mx-[14px] border-t-[0.5px] border-[#333]" />
+                <div className="px-3.5 py-3 flex items-center gap-2">
+                    <button onClick={(e) => { e.stopPropagation(); if (item.type === 'pizza') { setDetailsItem(item); return; } handleEdit(item); }} className="flex-1 bg-[#ff6b35] text-white text-sm font-medium rounded-[10px] py-[9px] hover:brightness-110 transition-all">Ver detalhes</button>
+                    <button onClick={(e) => { e.stopPropagation(); handleEdit(item); }} className="w-[38px] h-[38px] grid place-items-center bg-[#2a2a2a] text-stone-400 hover:text-stone-200 rounded-[10px] transition-all"><Edit2 size={16} /></button>
+                    <button onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }} className="w-[38px] h-[38px] grid place-items-center bg-[#2a2a2a] text-stone-400 hover:text-red-400 rounded-[10px] transition-all"><Trash2 size={16} /></button>
                 </div>
             </div>
             ))}
@@ -1272,9 +1351,21 @@ const MenuManager: React.FC = () => {
               <div ref={modalBodyRef} onScroll={handleModalScroll} className="flex-1 overflow-y-auto custom-scrollbar p-6 lg:px-12 space-y-10">
                 <div className="rounded-2xl border border-stone-200 dark:border-stone-700 p-3 bg-white dark:bg-stone-900">
                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-400 mb-2">Tipo do item</p>
-                    <div className="flex gap-2">
-                      <button onClick={() => handleTypeSwitch('normal')} className={`px-4 py-2 rounded-xl text-xs font-black uppercase border ${newItemType === 'normal' ? 'bg-orange-500 text-white border-orange-500' : 'border-stone-200 text-stone-500'}`}>Normal</button>
-                      <button onClick={() => handleTypeSwitch('pizza')} className={`px-4 py-2 rounded-xl text-xs font-black uppercase border ${newItemType === 'pizza' ? 'bg-stone-900 text-white border-stone-900' : 'border-stone-200 text-stone-500'}`}>Pizza</button>
+                    <div className="flex gap-2" title={editingId ? 'Este campo não pode ser alterado após a criação' : undefined}>
+                      <button
+                        onClick={() => handleTypeSwitch('normal')}
+                        disabled={!!editingId}
+                        className={`px-4 py-2 rounded-xl text-xs font-black uppercase border ${newItemType === 'normal' ? 'bg-orange-500 text-white border-orange-500' : 'border-stone-200 text-stone-500'} ${editingId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        Normal
+                      </button>
+                      <button
+                        onClick={() => handleTypeSwitch('pizza')}
+                        disabled={!!editingId}
+                        className={`px-4 py-2 rounded-xl text-xs font-black uppercase border ${newItemType === 'pizza' ? 'bg-stone-900 text-white border-stone-900' : 'border-stone-200 text-stone-500'} ${editingId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        Pizza
+                      </button>
                     </div>
                   </div>
 
@@ -1308,7 +1399,14 @@ const MenuManager: React.FC = () => {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className={`space-y-2 ${isAddingCategory ? 'sm:col-span-2' : ''}`}>
                           <label className="text-[10px] font-black uppercase text-stone-500 ml-2">Categoria</label>
-                          {isAddingCategory ? (
+                          {editingId ? (
+                            <div
+                              title="Este campo não pode ser alterado após a criação"
+                              className="w-full h-[58px] bg-stone-100 dark:bg-stone-800/70 px-4 rounded-2xl border border-stone-200 dark:border-stone-700 font-bold text-stone-500 dark:text-stone-300 flex items-center opacity-50 cursor-not-allowed"
+                            >
+                              {originalCategory || formData.category}
+                            </div>
+                          ) : isAddingCategory ? (
                               <div className="flex gap-2 h-[58px] animate-in fade-in slide-in-from-left-2 duration-200">
                                   <input 
                                       autoFocus
@@ -1538,7 +1636,7 @@ const MenuManager: React.FC = () => {
                       <div className="space-y-2">
                         {formData.extras.map((extra, i) => (
                           <div key={i} className="bg-white dark:bg-stone-900 border border-stone-100 dark:border-stone-800 px-4 py-2 rounded-xl text-xs font-bold flex justify-between items-center dark:text-white">
-                            <span>{extra.name}</span>
+                            <span>{flavor.name}</span>
                             <div className="flex items-center gap-4">
                               <span className="text-orange-500">R$ {extra.price.toFixed(2)}</span>
                               <Trash2 size={12} className="cursor-pointer text-stone-300 hover:text-red-500" onClick={() => removeExtra(i)} />
@@ -1791,107 +1889,116 @@ const MenuManager: React.FC = () => {
             <div className="sticky top-0 z-10 px-6 py-4 border-b border-stone-100 dark:border-stone-800 bg-white/95 dark:bg-stone-900/95 backdrop-blur flex items-start justify-between gap-4">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-500">Detalhes da pizza</p>
-                <h3 className="font-black text-xl text-stone-800 dark:text-white uppercase">{detailsItem.name}</h3>
-                <p className="text-xs text-stone-500">{`${getPizzaSizes(detailsItem).length} tamanhos • ${getPizzaFlavorIds(detailsItem).length} sabores • ${getPizzaBorders(detailsItem).length} bordas`}</p>
+                <h3 className="font-black text-xl text-stone-800 dark:text-white uppercase">{selectedPizzaDetails?.name || detailsItem.name}</h3>
+                <p className="text-xs text-stone-500">{`${selectedSizes.length} tamanhos • ${flavorRows.length} sabores • ${borderRows.length} bordas`}</p>
               </div>
               <button onClick={() => setDetailsItem(null)} className="p-2 rounded-xl bg-stone-100 dark:bg-stone-800 text-stone-500 hover:text-stone-700"><X size={18} /></button>
             </div>
 
             <div className="p-6 space-y-6">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4">
-                  <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Tamanhos</h4>
-                  <div className="space-y-2">
-                    {getPizzaSizes(detailsItem).map((size) => (
-                      <div key={size.id} className="grid grid-cols-4 gap-2 text-xs bg-stone-50 dark:bg-stone-800/40 rounded-xl px-3 py-2">
-                        <span className="font-black text-stone-700 dark:text-stone-200">{size.label}</span>
-                        <span className="text-stone-500">{size.slices || '-'} fatias</span>
-                        <span className="text-stone-500">{size.maxFlavors} sabores</span>
-                        <span className="text-emerald-500 font-bold">Ativo</span>
-                      </div>
-                    ))}
-                    {getPizzaSizes(detailsItem).length === 0 && <p className="text-xs text-stone-400">Nenhum tamanho cadastrado.</p>}
-                  </div>
-                </section>
-
-                <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4">
-                  <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Sabores</h4>
-                  <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                    {globalPizzaFlavors.filter((flavor) => getPizzaFlavorIds(detailsItem).includes(flavor.id)).map((flavor) => (
-                      <div key={flavor.id} className="text-xs bg-stone-50 dark:bg-stone-800/40 rounded-xl px-3 py-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-black text-stone-700 dark:text-stone-200">{flavor.name}</span>
-                          <span className={`font-bold ${flavor.active !== false ? 'text-emerald-500' : 'text-stone-400'}`}>{flavor.active !== false ? 'Ativo' : 'Inativo'}</span>
-                        </div>
-                        <p className="text-stone-500">{flavor.flavorType || '—'} • {flavor.category || 'Sem categoria'}</p>
-                        <p className="text-stone-400 line-clamp-1">{flavor.ingredients.map((ingredient) => ingredient.name).join(', ') || 'Sem ingredientes informados'}</p>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              </div>
-
-              <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4 overflow-x-auto">
-                <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Preço dos sabores por tamanho</h4>
-                <table className="w-full min-w-[560px] text-xs">
-                  <thead>
-                    <tr className="text-left text-stone-400 uppercase">
-                      <th className="pb-2">Sabor</th>
-                      {getPizzaSizes(detailsItem).map((size) => <th key={size.id} className="pb-2">{size.label}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {globalPizzaFlavors.filter((flavor) => getPizzaFlavorIds(detailsItem).includes(flavor.id)).map((flavor) => (
-                      <tr key={flavor.id} className="border-t border-stone-100 dark:border-stone-800">
-                        <td className="py-2 font-bold text-stone-700 dark:text-stone-200">{flavor.name}</td>
-                        {getPizzaSizes(detailsItem).map((size) => {
-                          const delta = Number(flavor.priceDeltaBySize?.[size.id] ?? flavor.priceDeltaBySize?.[size.label] ?? 0);
-                          const finalPrice = Number(size.basePrice || 0) + (Number.isFinite(delta) ? delta : 0);
-                          return <td key={`${flavor.id}-${size.id}`} className="py-2 text-stone-500">{formatCurrencyBRL(finalPrice)}</td>;
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </section>
-
-              <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4">
-                <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Bordas</h4>
-                <div className="space-y-2">
-                  {getPizzaBorders(detailsItem).map((border, index) => (
-                    <div key={border.id || index} className="grid grid-cols-3 gap-2 text-xs bg-stone-50 dark:bg-stone-800/40 rounded-xl px-3 py-2">
-                      <span className="font-black text-stone-700 dark:text-stone-200">{border.name || border.label || 'Borda sem nome'}</span>
-                      <span className="text-stone-500">{border.type || 'Tipo padrão'}</span>
-                      <span className={`font-bold ${border.active === false ? 'text-stone-400' : 'text-emerald-500'}`}>{border.active === false ? 'Inativo' : 'Ativo'}</span>
-                    </div>
-                  ))}
-                  {getPizzaBorders(detailsItem).length === 0 && <p className="text-xs text-stone-400">Nenhuma borda cadastrada.</p>}
+              {pizzaDetailsError && (
+                <div className="rounded-xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-300">
+                  {pizzaDetailsError}
                 </div>
-              </section>
+              )}
 
-              <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4 overflow-x-auto">
-                <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Preço das bordas por tamanho</h4>
-                <table className="w-full min-w-[560px] text-xs">
-                  <thead>
-                    <tr className="text-left text-stone-400 uppercase">
-                      <th className="pb-2">Borda</th>
-                      {getPizzaSizes(detailsItem).map((size) => <th key={size.id} className="pb-2">{size.label}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {getPizzaBorders(detailsItem).map((border, index) => (
-                      <tr key={border.id || index} className="border-t border-stone-100 dark:border-stone-800">
-                        <td className="py-2 font-bold text-stone-700 dark:text-stone-200">{border.name || border.label || 'Borda'}</td>
-                        {getPizzaSizes(detailsItem).map((size) => {
-                          const priceBySize = border.priceBySize || border.extraPriceBySize || {};
-                          const value = Number(priceBySize[size.id] ?? priceBySize[size.label] ?? border.extraPrice ?? 0);
-                          return <td key={`${border.id || index}-${size.id}`} className="py-2 text-stone-500">{formatCurrencyBRL(Number.isFinite(value) ? value : 0)}</td>;
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </section>
+              {pizzaDetailsLoading ? (
+                <div className="space-y-4 animate-pulse">
+                  <div className="h-24 rounded-2xl bg-stone-100 dark:bg-stone-800" />
+                  <div className="h-40 rounded-2xl bg-stone-100 dark:bg-stone-800" />
+                  <div className="h-24 rounded-2xl bg-stone-100 dark:bg-stone-800" />
+                  <div className="h-40 rounded-2xl bg-stone-100 dark:bg-stone-800" />
+                </div>
+              ) : (
+                <>
+                  <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4">
+                    <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Tamanhos</h4>
+                    <div className="space-y-2">
+                      {selectedSizes.map((size) => (
+                        <div key={size.id} className="grid grid-cols-1 md:grid-cols-5 gap-2 text-xs bg-stone-50 dark:bg-stone-800/40 rounded-xl px-3 py-2 items-center">
+                          <span className="font-black text-stone-700 dark:text-stone-200">{size.label}</span>
+                          <span className="text-stone-500">{size.slices ?? '-'} fatias</span>
+                          <span className="text-stone-500">{size.maxFlavors} sabores</span>
+                          <span className={`justify-self-start px-2 py-1 rounded-md font-bold ${activeLabel === 'Ativo' ? 'text-[#00e5b0] bg-emerald-500/10' : 'text-stone-400 bg-stone-200/40 dark:bg-stone-700/50'}`}>{activeLabel}</span>
+                          <span className="text-[10px] text-stone-400">ID: {size.id}</span>
+                        </div>
+                      ))}
+                      {selectedSizes.length === 0 && <p className="text-xs text-stone-400">Nenhum tamanho cadastrado.</p>}
+                    </div>
+                  </section>
+
+                  {selectedSizes.length > 0 && (
+                  <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4 overflow-x-auto">
+                    <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Preço dos sabores por tamanho</h4>
+                    <table className="w-full min-w-[560px] text-xs">
+                      <thead>
+                        <tr className="text-left text-stone-400 uppercase">
+                          <th className="pb-2">Sabor</th>
+                          {selectedSizes.map((size) => <th key={size.id} className="pb-2">{size.label}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {flavorRows.map((flavor) => (
+                          <tr key={flavor.id} className="border-t border-stone-100 dark:border-stone-800">
+                            <td className="py-2 font-bold text-stone-700 dark:text-stone-200">{flavor.name}</td>
+                            {selectedSizes.map((size) => (
+                              <td key={`${flavor.name}-${size.id}`} className="py-2 text-stone-500">{(() => { const value = resolvePriceBySize(flavor, size); return value === null ? '—' : formatCurrencyBRL(value); })()}</td>
+                            ))}
+                          </tr>
+                        ))}
+                        {flavorRows.length === 0 && (
+                          <tr>
+                            <td colSpan={Math.max(1, selectedSizes.length + 1)} className="py-3 text-stone-400">Nenhum sabor com preço cadastrado.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </section>
+                  )}
+
+                  <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4">
+                    <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Bordas</h4>
+                    <div className="space-y-2">
+                      {borderRows.map((border) => (
+                        <div key={border.id} className="grid grid-cols-2 gap-2 text-xs bg-stone-50 dark:bg-stone-800/40 rounded-xl px-3 py-2">
+                          <span className="font-black text-stone-700 dark:text-stone-200">{border.name}</span>
+                          <span className="text-stone-500">{(() => { const value = Number(border.extraPrice ?? NaN); return Number.isFinite(value) ? formatCurrencyBRL(value) : '—'; })()}</span>
+                        </div>
+                      ))}
+                      {borderRows.length === 0 && <p className="text-xs text-stone-400">Nenhuma borda cadastrada.</p>}
+                    </div>
+                  </section>
+
+                  {selectedSizes.length > 0 && (
+                  <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4 overflow-x-auto">
+                    <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Preço das bordas por tamanho</h4>
+                    <table className="w-full min-w-[560px] text-xs">
+                      <thead>
+                        <tr className="text-left text-stone-400 uppercase">
+                          <th className="pb-2">Borda</th>
+                          {selectedSizes.map((size) => <th key={size.id} className="pb-2">{size.label}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {borderRows.map((border) => (
+                          <tr key={border.id} className="border-t border-stone-100 dark:border-stone-800">
+                            <td className="py-2 font-bold text-stone-700 dark:text-stone-200">{border.name}</td>
+                            {selectedSizes.map((size) => (
+                              <td key={`${border.name}-${size.id}`} className="py-2 text-stone-500">{(() => { const value = resolvePriceBySize(border, size); return value === null ? '—' : formatCurrencyBRL(value); })()}</td>
+                            ))}
+                          </tr>
+                        ))}
+                        {borderRows.length === 0 && (
+                          <tr>
+                            <td colSpan={Math.max(1, selectedSizes.length + 1)} className="py-3 text-stone-400">Nenhuma borda cadastrada.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </section>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>

@@ -2,7 +2,7 @@
 export type OrderStatus = 'pending' | 'preparing' | 'shipping' | 'completed' | 'cancelled';
 
 export interface ExtraItem {
-  type?: 'regular' | 'pizza';
+  type?: 'regular' | 'pizza' | 'borda';
   name: string;
   price: number;
 }
@@ -56,7 +56,7 @@ export interface PizzaFlavor {
 
 export interface MenuItem {
   id: string;
-  type?: 'regular' | 'pizza';
+  type?: 'regular' | 'pizza' | 'borda';
   name: string;
   category: string;
   price: number;
