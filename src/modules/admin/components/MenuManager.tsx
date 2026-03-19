@@ -39,6 +39,56 @@ type PizzaExtraEntry = {
   name: string;
   price: number;
   type?: string;
+  priceBySize?: Record<string, number> | null;
+};
+
+type PizzaBorderRecord = {
+  id: string;
+  name: string;
+  active?: boolean;
+  isActive?: boolean;
+  category?: string;
+  image?: string | null;
+  priceDeltaBySize?: Record<string, number> | null;
+  extraPrice?: number | null;
+};
+
+const toFiniteNumber = (value: unknown): number | null => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
+const normalizeBorderPriceMatrix = (raw: unknown): Record<string, Record<string, number>> => {
+  if (!raw) return {};
+
+  if (Array.isArray(raw)) {
+    return raw.reduce<Record<string, Record<string, number>>>((acc, entry) => {
+      if (!entry || typeof entry !== 'object') return acc;
+      const row = entry as Record<string, unknown>;
+      const borderId = String(row.bordaId || row.borderId || row.crustId || row.id || '').trim();
+      const sizeId = String(row.tamanhoId || row.sizeId || row.pizzaSizeId || '').trim();
+      const price = toFiniteNumber(row.preco ?? row.price ?? row.valor);
+      if (!borderId || !sizeId || price === null) return acc;
+      if (!acc[borderId]) acc[borderId] = {};
+      acc[borderId][sizeId] = price;
+      return acc;
+    }, {});
+  }
+
+  if (typeof raw !== 'object') return {};
+
+  return Object.entries(raw as Record<string, unknown>).reduce<Record<string, Record<string, number>>>((acc, [borderId, bySize]) => {
+    if (!bySize || typeof bySize !== 'object') return acc;
+    const normalized = Object.entries(bySize as Record<string, unknown>).reduce<Record<string, number>>((sizes, [sizeId, price]) => {
+      const numeric = toFiniteNumber(price);
+      if (numeric !== null) sizes[String(sizeId)] = numeric;
+      return sizes;
+    }, {});
+    if (Object.keys(normalized).length) {
+      acc[String(borderId)] = normalized;
+    }
+    return acc;
+  }, {});
 };
 
 
@@ -386,18 +436,75 @@ const MenuManager: React.FC = () => {
 
   const getPizzaFlavorIds = (item: MenuItem) => item.allowedFlavorIds || [];
 
-  const getPizzaBorders = (item: MenuItem) => {
+  const getPizzaBorders = (item: MenuItem | null | undefined): PizzaBorderRecord[] => {
+    if (!item) return [];
+
     const rawItem = item as MenuItem & {
+      bordas?: Array<Record<string, any>>;
       borders?: Array<Record<string, any>>;
       borderOptions?: Array<Record<string, any>>;
       crustOptions?: Array<Record<string, any>>;
+      crusts?: Array<Record<string, any>>;
       allowedBorderIds?: string[];
+      precoBordasPorTamanho?: unknown;
+      borderPrices?: unknown;
+      crustPrices?: unknown;
+      extras?: PizzaExtraEntry[];
     };
 
-    const source = rawItem.borders || rawItem.borderOptions || rawItem.crustOptions || [];
-    if (source.length > 0) return source;
+    const priceMatrix = normalizeBorderPriceMatrix(
+      rawItem.precoBordasPorTamanho || rawItem.borderPrices || rawItem.crustPrices || {}
+    );
 
-    return (rawItem.allowedBorderIds || []).map((id) => ({ id, name: id }));
+    const source = rawItem.bordas || rawItem.borders || rawItem.borderOptions || rawItem.crustOptions || rawItem.crusts || [];
+    const normalizedFromList = source.map((border, index) => {
+      const id = String(border?.id || border?.bordaId || border?.borderId || border?.crustId || `border-${index}`).trim();
+      const name = String(border?.nome || border?.name || border?.label || id).trim();
+      const mappedPriceBySize = normalizeBorderPriceMatrix(border?.precoPorTamanho || border?.priceBySize || border?.prices)[id];
+      const matrixPriceBySize = priceMatrix[id];
+      const extraPrice = toFiniteNumber(border?.preco ?? border?.price ?? border?.extraPrice);
+      return {
+        ...border,
+        id,
+        name,
+        category: String(border?.categoria || border?.category || ''),
+        image: String(border?.imagem || border?.image || border?.imageUrl || ''),
+        active: border?.active !== false,
+        isActive: border?.isActive !== false,
+        priceDeltaBySize: mappedPriceBySize || matrixPriceBySize || null,
+        extraPrice: extraPrice ?? null
+      } as PizzaBorderRecord;
+    });
+
+    const normalizedFromExtras = (rawItem.extras || [])
+      .filter((extra) => ['borda', 'border', 'crust'].includes(String(extra?.type || '').toLowerCase()) && extra?.name)
+      .map((extra, index) => {
+        const syntheticId = `extra-border-${index}-${extra.name.trim().toLowerCase().replace(/\s+/g, '-')}`;
+        const bySize = normalizeBorderPriceMatrix(extra.priceBySize || {})[syntheticId] || (extra.priceBySize || null);
+        return {
+          id: syntheticId,
+          name: extra.name.trim(),
+          active: true,
+          isActive: true,
+          priceDeltaBySize: bySize,
+          extraPrice: toFiniteNumber(extra.price)
+        } as PizzaBorderRecord;
+      });
+
+    const normalizedFromIds = (rawItem.allowedBorderIds || []).map((id) => {
+      const key = String(id);
+      const fromGlobal = globalPizzaBorders.find((border) => border.id === key);
+      return fromGlobal || { id: key, name: key, active: true, isActive: true, priceDeltaBySize: priceMatrix[key] || null, extraPrice: null };
+    });
+
+    const merged = [...normalizedFromList, ...normalizedFromExtras, ...normalizedFromIds];
+    const seen = new Set<string>();
+    return merged.filter((border) => {
+      const key = `${border.id}::${border.name.toLowerCase()}`;
+      if (!border.name || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   };
 
   const getStartingPrice = (item: MenuItem) => {
@@ -421,7 +528,7 @@ const MenuManager: React.FC = () => {
 
   const selectedFlavorIds = new Set(((selectedPizzaDetails?.allowedFlavorIds || []) as string[]).map((id) => String(id)));
   const flavorRows = onlyActive(globalPizzaFlavors).filter((flavor) => selectedFlavorIds.has(flavor.id));
-  const borderRows = onlyActive(globalPizzaBorders);
+  const borderRows = onlyActive(getPizzaBorders(selectedPizzaDetails));
 
   const activeLabel = (selectedPizzaDetails as MenuItem & { active?: boolean } | null)?.active !== false ? 'Ativo' : 'Inativo';
 
