@@ -28,6 +28,12 @@ interface Props {
 }
 
 const PIZZA_COLORS = ['#f97316', '#0ea5e9', '#22c55e', '#a855f7'];
+const formatCurrencyBRL = (value: number) => new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2
+}).format(value);
 
 const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], pizzaFlavorsLoading = false, pizzaFlavorsError = null, initialData, isOpen, onClose, onAddToCart }) => {
   const [quantity, setQuantity] = useState(1);
@@ -78,12 +84,38 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], pizzaFlavor
   const selectedSize = item && selectedSizeId ? getPizzaSize(item, selectedSizeId) : null;
   const maxFlavorsAllowed = selectedSize?.maxFlavors || 1;
 
+  const fallbackFlavorsFromItem = useMemo(() => {
+    if (!item || item.type !== 'pizza') return [] as PizzaFlavor[];
+    const extras = ((item as MenuItem & {
+      extras?: Array<{ name?: string; type?: string; priceBySize?: Record<string, number> | null; price?: number | null }>;
+    }).extras || []);
+
+    return extras
+      .filter((extra) => String(extra?.type || '').toLowerCase() === 'pizza' && extra?.name)
+      .map((extra, index) => ({
+        id: `pizza-extra-flavor-${index}-${String(extra.name).trim().toLowerCase().replace(/\s+/g, '-')}`,
+        name: String(extra.name).trim(),
+        category: 'pizza',
+        description: null,
+        imageUrl: null,
+        flavorType: 'Salgado' as const,
+        extraPrice: typeof extra.price === 'number' ? extra.price : null,
+        tags: [],
+        ingredients: [],
+        active: true,
+        isActive: true,
+        priceDeltaBySize: extra.priceBySize || null
+      }));
+  }, [item]);
+
   const availablePizzaFlavors = useMemo(() => {
     const allowedFlavorIds = item?.allowedFlavorIds || [];
-    return pizzaFlavors
+    const fromCatalog = pizzaFlavors
       .filter((flavor) => flavor.active)
       .filter((flavor) => allowedFlavorIds.length === 0 || allowedFlavorIds.includes(flavor.id) || allowedFlavorIds.includes(flavor.name));
-  }, [pizzaFlavors, item?.allowedFlavorIds]);
+    if (fromCatalog.length > 0) return fromCatalog;
+    return fallbackFlavorsFromItem;
+  }, [pizzaFlavors, item?.allowedFlavorIds, fallbackFlavorsFromItem]);
 
   const selectedFlavors = useMemo(() => {
     return segmentFlavorIds
@@ -278,16 +310,22 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], pizzaFlavor
 
                 {pizzaFlavorsLoading ? (
                   <p className="text-xs text-zinc-500">Carregando sabores e ingredientes...</p>
-                ) : pizzaFlavorsError ? (
+                ) : pizzaFlavorsError && availablePizzaFlavors.length === 0 ? (
                   <p className="text-xs text-red-500">{pizzaFlavorsError}</p>
                 ) : availablePizzaFlavors.length === 0 ? (
-                  <p className="text-xs text-zinc-500">Nenhum sabor/ingrediente disponível para esta pizza no momento. Verifique os vínculos da pizza no painel.</p>
+                  <p className="text-xs text-zinc-500">Nenhum sabor disponível para esta pizza.</p>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {availablePizzaFlavors.map((flavor) => {
                       const isSelected = segmentFlavorIds.includes(flavor.id);
                       const ingredientPreview = flavor.ingredients.slice(0, 3).map((ingredient) => ingredient.name).join(', ');
                       const flavorType = flavor.flavorType || 'Salgado';
+                      const flavorPrice = (() => {
+                        const fromSize = Number(selectedSize?.id ? flavor.priceDeltaBySize?.[selectedSize.id] : NaN);
+                        if (Number.isFinite(fromSize)) return fromSize;
+                        const fallback = Number(flavor.extraPrice ?? NaN);
+                        return Number.isFinite(fallback) ? fallback : null;
+                      })();
                       return (
                         <button
                           key={flavor.id}
@@ -308,7 +346,8 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], pizzaFlavor
                                 <p className="text-sm font-black text-zinc-800 dark:text-zinc-100 truncate">{flavor.name}</p>
                                 {isSelected && <Check size={14} className="text-orange-500" />}
                               </div>
-                              <p className="text-[11px] text-zinc-500">{flavorType}{typeof flavor.extraPrice === 'number' ? ` • +R$ ${flavor.extraPrice.toFixed(2)}` : ''}</p>
+                              <p className="text-[11px] font-bold text-orange-600">{flavorPrice === null ? '—' : formatCurrencyBRL(flavorPrice)}</p>
+                              <p className="text-[11px] text-zinc-500">{flavorType}</p>
                               <p className="text-[11px] text-zinc-400 truncate">{ingredientPreview || 'Sem ingredientes cadastrados'}</p>
                             </div>
                           </div>
