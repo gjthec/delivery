@@ -12,6 +12,7 @@ import AiSuggestionsSection from './components/AiSuggestionsSection';
 import CustomerBottomNav from './components/CustomerBottomNav';
 import CustomerHeroSection from './components/CustomerHeroSection';
 import { useCustomerAppController } from './hooks/useCustomerAppController';
+import { MenuItem, PizzaSizeOption } from '../../types';
 
 const CustomerApp: React.FC = () => {
   const {
@@ -66,6 +67,38 @@ const CustomerApp: React.FC = () => {
     handleAskWaiter,
     handleExploreClick
   } = useCustomerAppController();
+
+  const listingItems = React.useMemo(() => {
+    return filteredItems.flatMap((item) => {
+      if (item.type !== 'pizza') {
+        return [{ listingId: item.id, sourceItem: item, displayItem: item, sizeLabel: undefined as string | undefined, preselectedSizeId: undefined as string | undefined }];
+      }
+
+      const activeSizes = ((item.sizes || []) as PizzaSizeOption[]).filter((size) => {
+        const status = size as PizzaSizeOption & { active?: boolean; isActive?: boolean };
+        return status.active !== false && status.isActive !== false;
+      });
+
+      if (activeSizes.length === 0) {
+        return [{ listingId: item.id, sourceItem: item, displayItem: item, sizeLabel: undefined as string | undefined, preselectedSizeId: undefined as string | undefined }];
+      }
+
+      return activeSizes.map((size) => {
+        const price = Number(size.basePrice);
+        const displayItem: MenuItem = {
+          ...item,
+          price: Number.isFinite(price) ? price : item.price
+        };
+        return {
+          listingId: `${item.id}::${size.id}`,
+          sourceItem: item,
+          displayItem,
+          sizeLabel: size.label,
+          preselectedSizeId: size.id
+        };
+      });
+    });
+  }, [filteredItems]);
 
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950 transition-colors duration-300 pb-44 text-zinc-900 dark:text-zinc-50 font-sans selection:bg-orange-100 selection:text-orange-900 overflow-x-hidden">
@@ -156,15 +189,31 @@ const CustomerApp: React.FC = () => {
         />
 
         <section className="px-6 pt-4 space-y-12">
-          {filteredItems.length === 0 ? (
+          {listingItems.length === 0 ? (
             <div className="rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 p-8 text-center">
               <p className="text-sm font-semibold text-zinc-600 dark:text-zinc-300">Nenhum item encontrado para este tenant.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-              {filteredItems.map((item, idx) => (
-                <div key={item.id} className="animate-in fade-in slide-in-from-bottom-10 duration-700" style={{ animationDelay: `${idx * 40}ms` }} onClick={() => openItemDetails(item)}>
-                  <MenuCard item={item} onAdd={(i) => saveToCart(i, 1, [], [], '')} count={getItemCountInCart(item.id)} />
+              {listingItems.map((listingItem, idx) => (
+                <div
+                  key={listingItem.listingId}
+                  className="animate-in fade-in slide-in-from-bottom-10 duration-700"
+                  style={{ animationDelay: `${idx * 40}ms` }}
+                  onClick={() => openItemDetails(listingItem.sourceItem, listingItem.preselectedSizeId)}
+                >
+                  <MenuCard
+                    item={listingItem.displayItem}
+                    subtitle={listingItem.sizeLabel}
+                    onAdd={(i) => {
+                      if (listingItem.sourceItem.type === 'pizza') {
+                        openItemDetails(listingItem.sourceItem, listingItem.preselectedSizeId);
+                        return;
+                      }
+                      saveToCart(i, 1, [], [], '');
+                    }}
+                    count={getItemCountInCart(listingItem.sourceItem.id)}
+                  />
                 </div>
               ))}
             </div>

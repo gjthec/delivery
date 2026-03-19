@@ -5,12 +5,20 @@ import { MenuItem } from '../types';
 
 interface Props {
   item: MenuItem;
+  subtitle?: string;
   isHighlighted?: boolean;
   onAdd?: (item: MenuItem) => void;
   count?: number;
 }
 
-const MenuCard: React.FC<Props> = ({ item, isHighlighted, onAdd, count = 0 }) => {
+const formatCurrencyBRL = (value: number) => new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2
+}).format(value);
+
+const MenuCard: React.FC<Props> = ({ item, subtitle, isHighlighted, onAdd, count = 0 }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [showPlusOne, setShowPlusOne] = useState(false);
   const [pulse, setPulse] = useState(false);
@@ -30,7 +38,10 @@ const MenuCard: React.FC<Props> = ({ item, isHighlighted, onAdd, count = 0 }) =>
 
   const handleAdd = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (item.type === 'pizza') return;
+    if (item.type === 'pizza') {
+      onAdd?.(item);
+      return;
+    }
     setIsAdding(true);
     setShowPlusOne(true);
     onAdd?.(item);
@@ -126,17 +137,18 @@ const MenuCard: React.FC<Props> = ({ item, isHighlighted, onAdd, count = 0 }) =>
                 {item.name}
               </h3>
             </div>
+            {subtitle && <p className="text-xs font-black uppercase tracking-[0.12em] text-zinc-500 dark:text-zinc-400 mb-2">{subtitle}</p>}
             {isInCart && (
               <p className="text-[10px] font-black uppercase tracking-widest text-orange-500/60 mb-2">Já está na sua sacola</p>
             )}
           </div>
           <div className="flex flex-col items-end">
             <span className={`text-xl font-black ${hasPromo ? 'text-red-500' : 'text-zinc-900 dark:text-zinc-50'}`}>
-              R${item.price.toFixed(0)}
+              {formatCurrencyBRL(item.price)}
             </span>
             {hasPromo && (
               <span className="text-[10px] font-bold text-zinc-400 line-through">
-                R${item.originalPrice?.toFixed(0)}
+                {formatCurrencyBRL(Number(item.originalPrice || 0))}
               </span>
             )}
           </div>

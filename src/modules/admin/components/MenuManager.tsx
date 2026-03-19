@@ -39,6 +39,56 @@ type PizzaExtraEntry = {
   name: string;
   price: number;
   type?: string;
+  priceBySize?: Record<string, number> | null;
+};
+
+type PizzaBorderRecord = {
+  id: string;
+  name: string;
+  active?: boolean;
+  isActive?: boolean;
+  category?: string;
+  image?: string | null;
+  priceDeltaBySize?: Record<string, number> | null;
+  extraPrice?: number | null;
+};
+
+const toFiniteNumber = (value: unknown): number | null => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
+const normalizeBorderPriceMatrix = (raw: unknown): Record<string, Record<string, number>> => {
+  if (!raw) return {};
+
+  if (Array.isArray(raw)) {
+    return raw.reduce<Record<string, Record<string, number>>>((acc, entry) => {
+      if (!entry || typeof entry !== 'object') return acc;
+      const row = entry as Record<string, unknown>;
+      const borderId = String(row.bordaId || row.borderId || row.crustId || row.id || '').trim();
+      const sizeId = String(row.tamanhoId || row.sizeId || row.pizzaSizeId || '').trim();
+      const price = toFiniteNumber(row.preco ?? row.price ?? row.valor);
+      if (!borderId || !sizeId || price === null) return acc;
+      if (!acc[borderId]) acc[borderId] = {};
+      acc[borderId][sizeId] = price;
+      return acc;
+    }, {});
+  }
+
+  if (typeof raw !== 'object') return {};
+
+  return Object.entries(raw as Record<string, unknown>).reduce<Record<string, Record<string, number>>>((acc, [borderId, bySize]) => {
+    if (!bySize || typeof bySize !== 'object') return acc;
+    const normalized = Object.entries(bySize as Record<string, unknown>).reduce<Record<string, number>>((sizes, [sizeId, price]) => {
+      const numeric = toFiniteNumber(price);
+      if (numeric !== null) sizes[String(sizeId)] = numeric;
+      return sizes;
+    }, {});
+    if (Object.keys(normalized).length) {
+      acc[String(borderId)] = normalized;
+    }
+    return acc;
+  }, {});
 };
 
 
@@ -386,18 +436,75 @@ const MenuManager: React.FC = () => {
 
   const getPizzaFlavorIds = (item: MenuItem) => item.allowedFlavorIds || [];
 
-  const getPizzaBorders = (item: MenuItem) => {
+  const getPizzaBorders = (item: MenuItem | null | undefined): PizzaBorderRecord[] => {
+    if (!item) return [];
+
     const rawItem = item as MenuItem & {
+      bordas?: Array<Record<string, any>>;
       borders?: Array<Record<string, any>>;
       borderOptions?: Array<Record<string, any>>;
       crustOptions?: Array<Record<string, any>>;
+      crusts?: Array<Record<string, any>>;
       allowedBorderIds?: string[];
+      precoBordasPorTamanho?: unknown;
+      borderPrices?: unknown;
+      crustPrices?: unknown;
+      extras?: PizzaExtraEntry[];
     };
 
-    const source = rawItem.borders || rawItem.borderOptions || rawItem.crustOptions || [];
-    if (source.length > 0) return source;
+    const priceMatrix = normalizeBorderPriceMatrix(
+      rawItem.precoBordasPorTamanho || rawItem.borderPrices || rawItem.crustPrices || {}
+    );
 
-    return (rawItem.allowedBorderIds || []).map((id) => ({ id, name: id }));
+    const source = rawItem.bordas || rawItem.borders || rawItem.borderOptions || rawItem.crustOptions || rawItem.crusts || [];
+    const normalizedFromList = source.map((border, index) => {
+      const id = String(border?.id || border?.bordaId || border?.borderId || border?.crustId || `border-${index}`).trim();
+      const name = String(border?.nome || border?.name || border?.label || id).trim();
+      const mappedPriceBySize = normalizeBorderPriceMatrix(border?.precoPorTamanho || border?.priceBySize || border?.prices)[id];
+      const matrixPriceBySize = priceMatrix[id];
+      const extraPrice = toFiniteNumber(border?.preco ?? border?.price ?? border?.extraPrice);
+      return {
+        ...border,
+        id,
+        name,
+        category: String(border?.categoria || border?.category || ''),
+        image: String(border?.imagem || border?.image || border?.imageUrl || ''),
+        active: border?.active !== false,
+        isActive: border?.isActive !== false,
+        priceDeltaBySize: mappedPriceBySize || matrixPriceBySize || null,
+        extraPrice: extraPrice ?? null
+      } as PizzaBorderRecord;
+    });
+
+    const normalizedFromExtras = (rawItem.extras || [])
+      .filter((extra) => ['borda', 'border', 'crust'].includes(String(extra?.type || '').toLowerCase()) && extra?.name)
+      .map((extra, index) => {
+        const syntheticId = `extra-border-${index}-${extra.name.trim().toLowerCase().replace(/\s+/g, '-')}`;
+        const bySize = normalizeBorderPriceMatrix(extra.priceBySize || {})[syntheticId] || (extra.priceBySize || null);
+        return {
+          id: syntheticId,
+          name: extra.name.trim(),
+          active: true,
+          isActive: true,
+          priceDeltaBySize: bySize,
+          extraPrice: toFiniteNumber(extra.price)
+        } as PizzaBorderRecord;
+      });
+
+    const normalizedFromIds = (rawItem.allowedBorderIds || []).map((id) => {
+      const key = String(id);
+      const fromGlobal = globalPizzaBorders.find((border) => border.id === key);
+      return fromGlobal || { id: key, name: key, active: true, isActive: true, priceDeltaBySize: priceMatrix[key] || null, extraPrice: null };
+    });
+
+    const merged = [...normalizedFromList, ...normalizedFromExtras, ...normalizedFromIds];
+    const seen = new Set<string>();
+    return merged.filter((border) => {
+      const key = `${border.id}::${border.name.toLowerCase()}`;
+      if (!border.name || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   };
 
   const getStartingPrice = (item: MenuItem) => {
@@ -421,7 +528,7 @@ const MenuManager: React.FC = () => {
 
   const selectedFlavorIds = new Set(((selectedPizzaDetails?.allowedFlavorIds || []) as string[]).map((id) => String(id)));
   const flavorRows = onlyActive(globalPizzaFlavors).filter((flavor) => selectedFlavorIds.has(flavor.id));
-  const borderRows = onlyActive(globalPizzaBorders);
+  const borderRows = onlyActive(getPizzaBorders(selectedPizzaDetails));
 
   const activeLabel = (selectedPizzaDetails as MenuItem & { active?: boolean } | null)?.active !== false ? 'Ativo' : 'Inativo';
 
@@ -1928,74 +2035,51 @@ const MenuManager: React.FC = () => {
                   </section>
 
                   {selectedSizes.length > 0 && (
-                  <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4 overflow-x-auto">
-                    <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Preço dos sabores por tamanho</h4>
-                    <table className="w-full min-w-[560px] text-xs">
-                      <thead>
-                        <tr className="text-left text-stone-400 uppercase">
-                          <th className="pb-2">Sabor</th>
-                          {selectedSizes.map((size) => <th key={size.id} className="pb-2">{size.label}</th>)}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {flavorRows.map((flavor) => (
-                          <tr key={flavor.id} className="border-t border-stone-100 dark:border-stone-800">
-                            <td className="py-2 font-bold text-stone-700 dark:text-stone-200">{flavor.name}</td>
-                            {selectedSizes.map((size) => (
-                              <td key={`${flavor.name}-${size.id}`} className="py-2 text-stone-500">{(() => { const value = resolvePriceBySize(flavor, size); return value === null ? '—' : formatCurrencyBRL(value); })()}</td>
-                            ))}
-                          </tr>
-                        ))}
-                        {flavorRows.length === 0 && (
-                          <tr>
-                            <td colSpan={Math.max(1, selectedSizes.length + 1)} className="py-3 text-stone-400">Nenhum sabor com preço cadastrado.</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </section>
-                  )}
+                    <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4">
+                      <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Opções por tamanho</h4>
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {selectedSizes.map((size) => (
+                          <article key={size.id} className="rounded-2xl border border-stone-200 dark:border-stone-700 bg-stone-50/80 dark:bg-stone-800/40 p-4 space-y-4">
+                            <header className="space-y-1">
+                              <h5 className="text-sm font-black text-stone-800 dark:text-stone-100">{size.label}</h5>
+                              <p className="text-xs text-stone-500">{`${size.slices ?? '-'} fatias • até ${size.maxFlavors} sabores`}</p>
+                            </header>
 
-                  <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4">
-                    <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Bordas</h4>
-                    <div className="space-y-2">
-                      {borderRows.map((border) => (
-                        <div key={border.id} className="grid grid-cols-2 gap-2 text-xs bg-stone-50 dark:bg-stone-800/40 rounded-xl px-3 py-2">
-                          <span className="font-black text-stone-700 dark:text-stone-200">{border.name}</span>
-                          <span className="text-stone-500">{(() => { const value = Number(border.extraPrice ?? NaN); return Number.isFinite(value) ? formatCurrencyBRL(value) : '—'; })()}</span>
-                        </div>
-                      ))}
-                      {borderRows.length === 0 && <p className="text-xs text-stone-400">Nenhuma borda cadastrada.</p>}
-                    </div>
-                  </section>
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-stone-500 mb-2">Sabores</p>
+                              <div className="space-y-2">
+                                {flavorRows.length === 0 && <p className="text-xs text-stone-400">Nenhum sabor cadastrado para este tamanho.</p>}
+                                {flavorRows.map((flavor) => {
+                                  const value = resolvePriceBySize(flavor, size);
+                                  return (
+                                    <div key={`${size.id}-${flavor.id}`} className="flex items-center justify-between gap-3 rounded-xl bg-white/70 dark:bg-stone-900/40 px-3 py-2 text-xs">
+                                      <span className="font-bold text-stone-700 dark:text-stone-200">{flavor.name}</span>
+                                      <span className="text-stone-500">{value === null ? '—' : formatCurrencyBRL(value)}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
 
-                  {selectedSizes.length > 0 && (
-                  <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4 overflow-x-auto">
-                    <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Preço das bordas por tamanho</h4>
-                    <table className="w-full min-w-[560px] text-xs">
-                      <thead>
-                        <tr className="text-left text-stone-400 uppercase">
-                          <th className="pb-2">Borda</th>
-                          {selectedSizes.map((size) => <th key={size.id} className="pb-2">{size.label}</th>)}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {borderRows.map((border) => (
-                          <tr key={border.id} className="border-t border-stone-100 dark:border-stone-800">
-                            <td className="py-2 font-bold text-stone-700 dark:text-stone-200">{border.name}</td>
-                            {selectedSizes.map((size) => (
-                              <td key={`${border.name}-${size.id}`} className="py-2 text-stone-500">{(() => { const value = resolvePriceBySize(border, size); return value === null ? '—' : formatCurrencyBRL(value); })()}</td>
-                            ))}
-                          </tr>
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-stone-500 mb-2">Bordas</p>
+                              <div className="space-y-2">
+                                {borderRows.length === 0 && <p className="text-xs text-stone-400">Nenhuma borda cadastrada.</p>}
+                                {borderRows.map((border) => {
+                                  const value = resolvePriceBySize(border, size);
+                                  return (
+                                    <div key={`${size.id}-${border.id}`} className="flex items-center justify-between gap-3 rounded-xl bg-white/70 dark:bg-stone-900/40 px-3 py-2 text-xs">
+                                      <span className="font-bold text-stone-700 dark:text-stone-200">{border.name}</span>
+                                      <span className="text-stone-500">{value === null ? '—' : formatCurrencyBRL(value)}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </article>
                         ))}
-                        {borderRows.length === 0 && (
-                          <tr>
-                            <td colSpan={Math.max(1, selectedSizes.length + 1)} className="py-3 text-stone-400">Nenhuma borda cadastrada.</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </section>
+                      </div>
+                    </section>
                   )}
                 </>
               )}

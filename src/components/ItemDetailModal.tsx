@@ -13,6 +13,7 @@ interface Props {
     selectedExtras: ExtraItem[];
     observations: string;
     quantity: number;
+    preselectedSizeId?: string;
     pizzaConfig?: Omit<OrderItemPizza, 'quantity' | 'notes'>;
   } | null;
   isOpen: boolean;
@@ -27,6 +28,12 @@ interface Props {
 }
 
 const PIZZA_COLORS = ['#f97316', '#0ea5e9', '#22c55e', '#a855f7'];
+const formatCurrencyBRL = (value: number) => new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2
+}).format(value);
 
 const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], pizzaFlavorsLoading = false, pizzaFlavorsError = null, initialData, isOpen, onClose, onAddToCart }) => {
   const [quantity, setQuantity] = useState(1);
@@ -48,7 +55,7 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], pizzaFlavor
     setObservations(initialData?.observations || '');
 
     const pizzaConfig = initialData?.pizzaConfig;
-    setSelectedSizeId(pizzaConfig?.sizeId || '');
+    setSelectedSizeId(pizzaConfig?.sizeId || initialData?.preselectedSizeId || '');
     setFlavorCountSelected(Math.max(1, pizzaConfig?.flavorCountSelected || pizzaConfig?.segments?.length || 1));
     setSegmentFlavorIds((pizzaConfig?.segments || []).map((segment) => segment.flavorId));
     setPizzaWarning('');
@@ -77,12 +84,38 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], pizzaFlavor
   const selectedSize = item && selectedSizeId ? getPizzaSize(item, selectedSizeId) : null;
   const maxFlavorsAllowed = selectedSize?.maxFlavors || 1;
 
+  const fallbackFlavorsFromItem = useMemo(() => {
+    if (!item || item.type !== 'pizza') return [] as PizzaFlavor[];
+    const extras = ((item as MenuItem & {
+      extras?: Array<{ name?: string; type?: string; priceBySize?: Record<string, number> | null; price?: number | null }>;
+    }).extras || []);
+
+    return extras
+      .filter((extra) => String(extra?.type || '').toLowerCase() === 'pizza' && extra?.name)
+      .map((extra, index) => ({
+        id: `pizza-extra-flavor-${index}-${String(extra.name).trim().toLowerCase().replace(/\s+/g, '-')}`,
+        name: String(extra.name).trim(),
+        category: 'pizza',
+        description: null,
+        imageUrl: null,
+        flavorType: 'Salgado' as const,
+        extraPrice: typeof extra.price === 'number' ? extra.price : null,
+        tags: [],
+        ingredients: [],
+        active: true,
+        isActive: true,
+        priceDeltaBySize: extra.priceBySize || null
+      }));
+  }, [item]);
+
   const availablePizzaFlavors = useMemo(() => {
     const allowedFlavorIds = item?.allowedFlavorIds || [];
-    return pizzaFlavors
+    const fromCatalog = pizzaFlavors
       .filter((flavor) => flavor.active)
       .filter((flavor) => allowedFlavorIds.length === 0 || allowedFlavorIds.includes(flavor.id) || allowedFlavorIds.includes(flavor.name));
-  }, [pizzaFlavors, item?.allowedFlavorIds]);
+    if (fromCatalog.length > 0) return fromCatalog;
+    return fallbackFlavorsFromItem;
+  }, [pizzaFlavors, item?.allowedFlavorIds, fallbackFlavorsFromItem]);
 
   const selectedFlavors = useMemo(() => {
     return segmentFlavorIds
@@ -158,8 +191,13 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], pizzaFlavor
 
   const ingredientsSummary = Array.from(new Set(selectedFlavors.flatMap((flavor) => flavor.ingredients.map((ingredient) => ingredient.name))));
   const selectedCount = segmentFlavorIds.slice(0, flavorCountSelected).filter(Boolean).length;
-  const pizzaStep = !selectedSizeId ? 1 : selectedCount < flavorCountSelected ? 2 : 3;
-  const pizzaStepLabels = ['1. Escolha o tamanho', '2. Selecione os sabores', '3. Revise e finalize'];
+  const hasPreselectedSize = Boolean(initialData?.preselectedSizeId);
+  const pizzaStep = hasPreselectedSize
+    ? (selectedCount < flavorCountSelected ? 1 : 2)
+    : (!selectedSizeId ? 1 : selectedCount < flavorCountSelected ? 2 : 3);
+  const pizzaStepLabels = hasPreselectedSize
+    ? ['1. Selecione os sabores', '2. Revise e finalize']
+    : ['1. Escolha o tamanho', '2. Selecione os sabores', '3. Revise e finalize'];
   const isPizzaReady = Boolean(selectedSizeId)
     && segments.length === flavorCountSelected
     && segments.every((segment) => Boolean(segment.flavorId));
@@ -217,8 +255,8 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], pizzaFlavor
             {isPizza && (
               <>
               <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 p-4 bg-zinc-50 dark:bg-zinc-900/70 space-y-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Monte sua pizza em 3 passos</p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">{hasPreselectedSize ? 'Monte sua pizza em 2 passos' : 'Monte sua pizza em 3 passos'}</p>
+                <div className={`grid grid-cols-1 gap-2 ${hasPreselectedSize ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
                   {pizzaStepLabels.map((label, index) => (
                     <div key={label} className={`rounded-xl px-3 py-2 border text-[11px] font-bold ${pizzaStep >= index + 1 ? 'border-orange-500 bg-orange-50/60 dark:bg-orange-500/10 text-orange-600' : 'border-zinc-200 dark:border-zinc-700 text-zinc-500'}`}>
                       {label}
@@ -228,18 +266,28 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], pizzaFlavor
                 <p className="text-xs text-zinc-500">Agora: <span className="font-black text-zinc-700 dark:text-zinc-200">{pizzaStepLabels[pizzaStep - 1]}</span></p>
               </div>
 
-              <div>
-                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400 mb-3">Tamanho</h3>
-                <p className="text-xs text-zinc-500 mb-3">Escolha primeiro o tamanho para liberar a configuração correta de sabores.</p>
-                <div className="grid grid-cols-2 gap-3">
-                  {(item.sizes || []).map((size) => (
-                    <button key={size.id} onClick={() => handleSizeChange(size.id)} className={`p-4 rounded-2xl border-2 text-left ${selectedSizeId === size.id ? 'border-orange-500 bg-orange-50/40 dark:bg-orange-500/10' : 'border-zinc-200 dark:border-zinc-800'}`}>
-                      <p className="font-black">{size.label}</p>
-                      <p className="text-xs text-zinc-500">até {size.maxFlavors} sabores • R$ {size.basePrice.toFixed(2)}</p>
-                    </button>
-                  ))}
+              {!hasPreselectedSize && (
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400 mb-3">Tamanho</h3>
+                  <p className="text-xs text-zinc-500 mb-3">Escolha primeiro o tamanho para liberar a configuração correta de sabores.</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {(item.sizes || []).map((size) => (
+                      <button key={size.id} onClick={() => handleSizeChange(size.id)} className={`p-4 rounded-2xl border-2 text-left ${selectedSizeId === size.id ? 'border-orange-500 bg-orange-50/40 dark:bg-orange-500/10' : 'border-zinc-200 dark:border-zinc-800'}`}>
+                        <p className="font-black">{size.label}</p>
+                        <p className="text-xs text-zinc-500">até {size.maxFlavors} sabores • R$ {size.basePrice.toFixed(2)}</p>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {hasPreselectedSize && selectedSize && (
+                <div className="rounded-2xl border border-orange-200 dark:border-orange-500/20 bg-orange-50/60 dark:bg-orange-500/10 px-4 py-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-600">Tamanho selecionado</p>
+                  <p className="text-sm font-black text-zinc-800 dark:text-zinc-100 mt-1">{selectedSize.label}</p>
+                  <p className="text-xs text-zinc-600 dark:text-zinc-300 mt-1">{`${selectedSize.slices ?? '-'} fatias • até ${selectedSize.maxFlavors} sabores`}</p>
+                </div>
+              )}
 
               <div>
                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400 mb-3">Quantidade de sabores</h3>
@@ -262,16 +310,22 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], pizzaFlavor
 
                 {pizzaFlavorsLoading ? (
                   <p className="text-xs text-zinc-500">Carregando sabores e ingredientes...</p>
-                ) : pizzaFlavorsError ? (
+                ) : pizzaFlavorsError && availablePizzaFlavors.length === 0 ? (
                   <p className="text-xs text-red-500">{pizzaFlavorsError}</p>
                 ) : availablePizzaFlavors.length === 0 ? (
-                  <p className="text-xs text-zinc-500">Nenhum sabor/ingrediente disponível para esta pizza no momento. Verifique os vínculos da pizza no painel.</p>
+                  <p className="text-xs text-zinc-500">Nenhum sabor disponível para esta pizza.</p>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {availablePizzaFlavors.map((flavor) => {
                       const isSelected = segmentFlavorIds.includes(flavor.id);
                       const ingredientPreview = flavor.ingredients.slice(0, 3).map((ingredient) => ingredient.name).join(', ');
                       const flavorType = flavor.flavorType || 'Salgado';
+                      const flavorPrice = (() => {
+                        const fromSize = Number(selectedSize?.id ? flavor.priceDeltaBySize?.[selectedSize.id] : NaN);
+                        if (Number.isFinite(fromSize)) return fromSize;
+                        const fallback = Number(flavor.extraPrice ?? NaN);
+                        return Number.isFinite(fallback) ? fallback : null;
+                      })();
                       return (
                         <button
                           key={flavor.id}
@@ -292,7 +346,8 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], pizzaFlavor
                                 <p className="text-sm font-black text-zinc-800 dark:text-zinc-100 truncate">{flavor.name}</p>
                                 {isSelected && <Check size={14} className="text-orange-500" />}
                               </div>
-                              <p className="text-[11px] text-zinc-500">{flavorType}{typeof flavor.extraPrice === 'number' ? ` • +R$ ${flavor.extraPrice.toFixed(2)}` : ''}</p>
+                              <p className="text-[11px] font-bold text-orange-600">{flavorPrice === null ? '—' : formatCurrencyBRL(flavorPrice)}</p>
+                              <p className="text-[11px] text-zinc-500">{flavorType}</p>
                               <p className="text-[11px] text-zinc-400 truncate">{ingredientPreview || 'Sem ingredientes cadastrados'}</p>
                             </div>
                           </div>
