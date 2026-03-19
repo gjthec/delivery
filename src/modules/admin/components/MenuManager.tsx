@@ -2035,74 +2035,51 @@ const MenuManager: React.FC = () => {
                   </section>
 
                   {selectedSizes.length > 0 && (
-                  <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4 overflow-x-auto">
-                    <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Preço dos sabores por tamanho</h4>
-                    <table className="w-full min-w-[560px] text-xs">
-                      <thead>
-                        <tr className="text-left text-stone-400 uppercase">
-                          <th className="pb-2">Sabor</th>
-                          {selectedSizes.map((size) => <th key={size.id} className="pb-2">{size.label}</th>)}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {flavorRows.map((flavor) => (
-                          <tr key={flavor.id} className="border-t border-stone-100 dark:border-stone-800">
-                            <td className="py-2 font-bold text-stone-700 dark:text-stone-200">{flavor.name}</td>
-                            {selectedSizes.map((size) => (
-                              <td key={`${flavor.name}-${size.id}`} className="py-2 text-stone-500">{(() => { const value = resolvePriceBySize(flavor, size); return value === null ? '—' : formatCurrencyBRL(value); })()}</td>
-                            ))}
-                          </tr>
-                        ))}
-                        {flavorRows.length === 0 && (
-                          <tr>
-                            <td colSpan={Math.max(1, selectedSizes.length + 1)} className="py-3 text-stone-400">Nenhum sabor com preço cadastrado.</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </section>
-                  )}
+                    <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4">
+                      <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Opções por tamanho</h4>
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {selectedSizes.map((size) => (
+                          <article key={size.id} className="rounded-2xl border border-stone-200 dark:border-stone-700 bg-stone-50/80 dark:bg-stone-800/40 p-4 space-y-4">
+                            <header className="space-y-1">
+                              <h5 className="text-sm font-black text-stone-800 dark:text-stone-100">{size.label}</h5>
+                              <p className="text-xs text-stone-500">{`${size.slices ?? '-'} fatias • até ${size.maxFlavors} sabores`}</p>
+                            </header>
 
-                  <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4">
-                    <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Bordas</h4>
-                    <div className="space-y-2">
-                      {borderRows.map((border) => (
-                        <div key={border.id} className="grid grid-cols-2 gap-2 text-xs bg-stone-50 dark:bg-stone-800/40 rounded-xl px-3 py-2">
-                          <span className="font-black text-stone-700 dark:text-stone-200">{border.name}</span>
-                          <span className="text-stone-500">{(() => { const value = Number(border.extraPrice ?? NaN); return Number.isFinite(value) ? formatCurrencyBRL(value) : '—'; })()}</span>
-                        </div>
-                      ))}
-                      {borderRows.length === 0 && <p className="text-xs text-stone-400">Nenhuma borda cadastrada.</p>}
-                    </div>
-                  </section>
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-stone-500 mb-2">Sabores</p>
+                              <div className="space-y-2">
+                                {flavorRows.length === 0 && <p className="text-xs text-stone-400">Nenhum sabor cadastrado para este tamanho.</p>}
+                                {flavorRows.map((flavor) => {
+                                  const value = resolvePriceBySize(flavor, size);
+                                  return (
+                                    <div key={`${size.id}-${flavor.id}`} className="flex items-center justify-between gap-3 rounded-xl bg-white/70 dark:bg-stone-900/40 px-3 py-2 text-xs">
+                                      <span className="font-bold text-stone-700 dark:text-stone-200">{flavor.name}</span>
+                                      <span className="text-stone-500">{value === null ? '—' : formatCurrencyBRL(value)}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
 
-                  {selectedSizes.length > 0 && (
-                  <section className="rounded-2xl border border-stone-100 dark:border-stone-800 p-4 overflow-x-auto">
-                    <h4 className="text-xs font-black uppercase tracking-widest text-stone-500 mb-3">Preço das bordas por tamanho</h4>
-                    <table className="w-full min-w-[560px] text-xs">
-                      <thead>
-                        <tr className="text-left text-stone-400 uppercase">
-                          <th className="pb-2">Borda</th>
-                          {selectedSizes.map((size) => <th key={size.id} className="pb-2">{size.label}</th>)}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {borderRows.map((border) => (
-                          <tr key={border.id} className="border-t border-stone-100 dark:border-stone-800">
-                            <td className="py-2 font-bold text-stone-700 dark:text-stone-200">{border.name}</td>
-                            {selectedSizes.map((size) => (
-                              <td key={`${border.name}-${size.id}`} className="py-2 text-stone-500">{(() => { const value = resolvePriceBySize(border, size); return value === null ? '—' : formatCurrencyBRL(value); })()}</td>
-                            ))}
-                          </tr>
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-stone-500 mb-2">Bordas</p>
+                              <div className="space-y-2">
+                                {borderRows.length === 0 && <p className="text-xs text-stone-400">Nenhuma borda cadastrada.</p>}
+                                {borderRows.map((border) => {
+                                  const value = resolvePriceBySize(border, size);
+                                  return (
+                                    <div key={`${size.id}-${border.id}`} className="flex items-center justify-between gap-3 rounded-xl bg-white/70 dark:bg-stone-900/40 px-3 py-2 text-xs">
+                                      <span className="font-bold text-stone-700 dark:text-stone-200">{border.name}</span>
+                                      <span className="text-stone-500">{value === null ? '—' : formatCurrencyBRL(value)}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </article>
                         ))}
-                        {borderRows.length === 0 && (
-                          <tr>
-                            <td colSpan={Math.max(1, selectedSizes.length + 1)} className="py-3 text-stone-400">Nenhuma borda cadastrada.</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </section>
+                      </div>
+                    </section>
                   )}
                 </>
               )}
