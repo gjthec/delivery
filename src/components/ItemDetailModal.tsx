@@ -13,6 +13,7 @@ interface Props {
     selectedExtras: ExtraItem[];
     observations: string;
     quantity: number;
+    preselectedSizeId?: string;
     pizzaConfig?: Omit<OrderItemPizza, 'quantity' | 'notes'>;
   } | null;
   isOpen: boolean;
@@ -48,7 +49,7 @@ const ItemDetailModal: React.FC<Props> = ({ item, pizzaFlavors = [], pizzaFlavor
     setObservations(initialData?.observations || '');
 
     const pizzaConfig = initialData?.pizzaConfig;
-    setSelectedSizeId(pizzaConfig?.sizeId || '');
+    setSelectedSizeId(pizzaConfig?.sizeId || initialData?.preselectedSizeId || '');
     setFlavorCountSelected(Math.max(1, pizzaConfig?.flavorCountSelected || pizzaConfig?.segments?.length || 1));
     setSegmentFlavorIds((pizzaConfig?.segments || []).map((segment) => segment.flavorId));
     setPizzaWarning('');

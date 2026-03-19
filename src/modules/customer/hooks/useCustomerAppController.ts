@@ -31,6 +31,7 @@ export function useCustomerAppController() {
   const [checkoutSession, setCheckoutSession] = useState<CheckoutSession | null>(null);
 
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
+  const [preselectedSizeId, setPreselectedSizeId] = useState<string | null>(null);
   const [editingCartIndex, setEditingCartIndex] = useState<number | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
@@ -104,7 +105,13 @@ export function useCustomerAppController() {
     observations: cart[editingCartIndex].observations,
     quantity: cart[editingCartIndex].quantity,
     pizzaConfig: cart[editingCartIndex].pizzaConfig
-  } : null;
+  } : (selectedItem?.type === 'pizza' && preselectedSizeId ? {
+    removedIngredients: [],
+    selectedExtras: [],
+    observations: '',
+    quantity: 1,
+    preselectedSizeId
+  } : null);
 
   const shouldHideFooter = isCartOpen || isPixModalOpen || isDetailModalOpen || isSearchFocused;
 
@@ -142,8 +149,9 @@ export function useCustomerAppController() {
     setTimeout(() => setIsCartJiggling(false), 500);
   };
 
-  const openItemDetails = (item: MenuItem) => {
+  const openItemDetails = (item: MenuItem, sizeId?: string) => {
     setEditingCartIndex(null);
+    setPreselectedSizeId(sizeId || null);
     setSelectedItem(item);
     setIsDetailModalOpen(true);
   };
@@ -151,6 +159,7 @@ export function useCustomerAppController() {
   const handleEditCartItem = (index: number) => {
     const cartItem = cart[index];
     setEditingCartIndex(index);
+    setPreselectedSizeId(null);
     setSelectedItem(cartItem.item);
     setIsDetailModalOpen(true);
   };
